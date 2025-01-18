@@ -120,7 +120,7 @@ class LoginPageState extends State<LoginPage> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Welcome back! Let\'s grow your happiness!',
+                            AppConstants.loginWelcomeMessage,
                             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                               color: Colors.grey[600],
                             ),

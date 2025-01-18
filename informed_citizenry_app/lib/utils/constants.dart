@@ -12,6 +12,8 @@ class AppConstants {
   static const String appTagline = 'Polititians are held accountable when the people are informed';
   static const String appDescription = 'Get a summarized feed of laws that are being proposed, how your representatives voted, and what they said about it.';
 
+  static const String loginWelcomeMessage = 'Welcome back! Stay informed, stay engaged.';
+
   // Form validation messages
   static const String emailRequired = 'Please enter your email';
   static const String invalidEmail = 'Please enter a valid email';
