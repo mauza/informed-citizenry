@@ -16,7 +16,7 @@ class SettingsService implements ISettingsService {
           .select()
           .eq('user_id', userId)
           .single();
-      return response != null ? Settings.fromJson(response) : null;
+      return Settings.fromJson(response);
     } catch (e) {
       if (e is PostgrestException && e.message.contains('multiple (or no) rows returned')) {
         return null;
@@ -51,7 +51,7 @@ class SettingsService implements ISettingsService {
           .select()
           .eq('user_id', userId)
           .single();
-      return response != null ? UserProfile.fromJson(response) : null;
+      return UserProfile.fromJson(response);
     } catch (e) {
       if (e is PostgrestException && e.message.contains('multiple (or no) rows returned')) {
         return null;

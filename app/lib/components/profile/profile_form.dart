@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:informed_citizenry_app/models/user_profile.dart';
 
 class ProfileForm extends StatelessWidget {
   final GlobalKey<FormState> formKey;

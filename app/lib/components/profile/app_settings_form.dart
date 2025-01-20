@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:informed_citizenry_app/models/settings.dart';
 
 class AppSettingsForm extends StatelessWidget {
   final GlobalKey<FormState> formKey;
