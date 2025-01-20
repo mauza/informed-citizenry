@@ -1,0 +1,129 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Districts API",
+    "description": "API for retrieving district information based on location",
+    "version": "1.0"
+  },
+  "tags": [
+    {
+      "name": "DistrictService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/districts/location": {
+      "get": {
+        "summary": "GetDistrictFromLocation returns district information for a given location",
+        "operationId": "DistrictService_GetDistrictFromLocation",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetDistrictFromLocationResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "location.latitude",
+            "in": "query",
+            "required": false,
+            "type": "number",
+            "format": "double"
+          },
+          {
+            "name": "location.longitude",
+            "in": "query",
+            "required": false,
+            "type": "number",
+            "format": "double"
+          }
+        ],
+        "tags": [
+          "DistrictService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "apiv1Location": {
+      "type": "object",
+      "properties": {
+        "latitude": {
+          "type": "number",
+          "format": "double"
+        },
+        "longitude": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "title": "Location message represents a geographical point"
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1District": {
+      "type": "object",
+      "properties": {
+        "districtId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string",
+          "title": "Add more fields as needed"
+        }
+      },
+      "title": "District message represents district information"
+    },
+    "v1GetDistrictFromLocationResponse": {
+      "type": "object",
+      "properties": {
+        "district": {
+          "$ref": "#/definitions/v1District"
+        }
+      },
+      "title": "Response message for GetDistrictFromLocation"
+    }
+  }
+}

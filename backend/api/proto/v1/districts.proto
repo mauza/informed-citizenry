@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package api.v1;
+
+option go_package = "api/gen/go/api/v1;apiv1";
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+// Enable custom OpenAPI annotations
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Districts API";
+    version: "1.0";
+    description: "API for retrieving district information based on location";
+  }
+};
+
+// Location message represents a geographical point
+message Location {
+  double latitude = 1;
+  double longitude = 2;
+}
+
+// District message represents district information
+message District {
+  string district_id = 1;
+  string name = 2;
+  string state = 3;
+  // Add more fields as needed
+}
+
+// Request message for GetDistrictFromLocation
+message GetDistrictFromLocationRequest {
+  Location location = 1;
+}
+
+// Response message for GetDistrictFromLocation
+message GetDistrictFromLocationResponse {
+  District district = 1;
+}
+
+// DistrictService provides methods for retrieving district information
+service DistrictService {
+  // GetDistrictFromLocation returns district information for a given location
+  rpc GetDistrictFromLocation(GetDistrictFromLocationRequest) returns (GetDistrictFromLocationResponse) {
+    option (google.api.http) = {
+      get: "/v1/districts/location"
+    };
+  }
+} 
