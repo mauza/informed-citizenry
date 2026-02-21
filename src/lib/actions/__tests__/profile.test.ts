@@ -51,7 +51,7 @@ describe('updateProfile', () => {
   });
 
   it('should update profile with valid data', async () => {
-    mockAuthFn.mockResolvedValue({ user: { id: 'user-1' } } as any);
+    mockAuthFn.mockResolvedValue({ user: { id: '550e8400-e29b-41d4-a716-446655440001' } } as any);
 
     const formData = new FormData();
     formData.append('name', 'John Doe');
@@ -69,7 +69,7 @@ describe('updateProfile', () => {
   });
 
   it('should do nothing with invalid name (too long)', async () => {
-    mockAuthFn.mockResolvedValue({ user: { id: 'user-1' } } as any);
+    mockAuthFn.mockResolvedValue({ user: { id: '550e8400-e29b-41d4-a716-446655440001' } } as any);
 
     const formData = new FormData();
     formData.append('name', 'a'.repeat(101)); // Over 100 chars
@@ -80,7 +80,7 @@ describe('updateProfile', () => {
   });
 
   it('should do nothing with invalid address (too long)', async () => {
-    mockAuthFn.mockResolvedValue({ user: { id: 'user-1' } } as any);
+    mockAuthFn.mockResolvedValue({ user: { id: '550e8400-e29b-41d4-a716-446655440001' } } as any);
 
     const formData = new FormData();
     formData.append('address', 'a'.repeat(301)); // Over 300 chars
@@ -92,7 +92,7 @@ describe('updateProfile', () => {
 
   it.skip('should update with empty address when address is not provided', async () => {
     // Skipped: Requires understanding exact zod validation behavior with FormData
-    mockAuthFn.mockResolvedValue({ user: { id: 'user-1' } } as any);
+    mockAuthFn.mockResolvedValue({ user: { id: '550e8400-e29b-41d4-a716-446655440001' } } as any);
 
     const formData = new FormData();
     formData.append('name', 'John Doe');
@@ -105,7 +105,7 @@ describe('updateProfile', () => {
   });
 
   it('should handle empty form data', async () => {
-    mockAuthFn.mockResolvedValue({ user: { id: 'user-1' } } as any);
+    mockAuthFn.mockResolvedValue({ user: { id: '550e8400-e29b-41d4-a716-446655440001' } } as any);
 
     const formData = new FormData();
 

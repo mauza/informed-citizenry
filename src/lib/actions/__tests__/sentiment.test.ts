@@ -31,21 +31,21 @@ describe('submitSentiment', () => {
   it('should return error when user is not authenticated', async () => {
     vi.mocked(auth).mockResolvedValue(null);
 
-    const result = await submitSentiment('bill-1', 'support');
+    const result = await submitSentiment('550e8400-e29b-41d4-a716-446655440003', 'support');
 
     expect(result).toEqual({ error: 'You must be signed in to vote.' });
   });
 
   it('should return error for invalid sentiment', async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { id: 'user-1' } } as any);
+    vi.mocked(auth).mockResolvedValue({ user: { id: '550e8400-e29b-41d4-a716-446655440001' } } as any);
 
-    const result = await submitSentiment('bill-1', 'invalid' as any);
+    const result = await submitSentiment('550e8400-e29b-41d4-a716-446655440003', 'invalid' as any);
 
     expect(result).toEqual({ error: 'Invalid input.' });
   });
 
   it('should return error for invalid billId', async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { id: 'user-1' } } as any);
+    vi.mocked(auth).mockResolvedValue({ user: { id: '550e8400-e29b-41d4-a716-446655440001' } } as any);
 
     const result = await submitSentiment('', 'support');
 
@@ -53,7 +53,7 @@ describe('submitSentiment', () => {
   });
 
   it('should successfully submit sentiment', async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { id: 'user-1' } } as any);
+    vi.mocked(auth).mockResolvedValue({ user: { id: '550e8400-e29b-41d4-a716-446655440001' } } as any);
     const mockInsert = vi.fn().mockReturnValue({
       values: vi.fn().mockReturnValue({
         onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
@@ -61,15 +61,15 @@ describe('submitSentiment', () => {
     });
     vi.mocked(db).insert = mockInsert;
 
-    const result = await submitSentiment('bill-1', 'support');
+    const result = await submitSentiment('550e8400-e29b-41d4-a716-446655440003', 'support');
 
     expect(result).toEqual({ success: true });
     expect(mockInsert).toHaveBeenCalled();
-    expect(revalidatePath).toHaveBeenCalledWith('/bills/bill-1');
+    expect(revalidatePath).toHaveBeenCalledWith('/bills/550e8400-e29b-41d4-a716-446655440003');
   });
 
   it('should update existing sentiment on conflict', async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { id: 'user-1' } } as any);
+    vi.mocked(auth).mockResolvedValue({ user: { id: '550e8400-e29b-41d4-a716-446655440001' } } as any);
     const mockOnConflictDoUpdate = vi.fn().mockResolvedValue(undefined);
     const mockInsert = vi.fn().mockReturnValue({
       values: vi.fn().mockReturnValue({
@@ -78,7 +78,7 @@ describe('submitSentiment', () => {
     });
     vi.mocked(db).insert = mockInsert;
 
-    await submitSentiment('bill-1', 'oppose');
+    await submitSentiment('550e8400-e29b-41d4-a716-446655440003', 'oppose');
 
     expect(mockOnConflictDoUpdate).toHaveBeenCalled();
   });
@@ -92,23 +92,23 @@ describe('removeSentiment', () => {
   it('should return error when user is not authenticated', async () => {
     vi.mocked(auth).mockResolvedValue(null);
 
-    const result = await removeSentiment('bill-1');
+    const result = await removeSentiment('550e8400-e29b-41d4-a716-446655440003');
 
     expect(result).toEqual({ error: 'You must be signed in.' });
   });
 
   it('should successfully remove sentiment', async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { id: 'user-1' } } as any);
+    vi.mocked(auth).mockResolvedValue({ user: { id: '550e8400-e29b-41d4-a716-446655440001' } } as any);
     const mockWhere = vi.fn().mockResolvedValue(undefined);
     const mockDelete = vi.fn().mockReturnValue({
       where: mockWhere,
     });
     vi.mocked(db).delete = mockDelete;
 
-    const result = await removeSentiment('bill-1');
+    const result = await removeSentiment('550e8400-e29b-41d4-a716-446655440003');
 
     expect(result).toEqual({ success: true });
     expect(mockDelete).toHaveBeenCalled();
-    expect(revalidatePath).toHaveBeenCalledWith('/bills/bill-1');
+    expect(revalidatePath).toHaveBeenCalledWith('/bills/550e8400-e29b-41d4-a716-446655440003');
   });
 });

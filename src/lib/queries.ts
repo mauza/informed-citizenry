@@ -10,6 +10,24 @@ import {
   userSubscriptions,
 } from "@/db/schema";
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { z } from "zod";
+
+// Validate UUID format
+const uuidSchema = z.string().uuid();
+
+// Validate and sanitize search input
+function sanitizeSearchInput(input: string): string {
+  // Remove any SQL special characters that could cause issues
+  // Even though Drizzle uses parameterized queries, this adds defense in depth
+  return input
+    .replace(/[%_]/g, "\\$&") // Escape SQL LIKE special characters
+    .replace(/[<>]/g, ""); // Remove potential HTML/JS injection characters
+}
+
+// Validate state ID (2-letter abbreviation)
+const stateIdSchema = z.string().length(2).regex(/^[A-Z]{2}$/);
+
+const VALID_STATUSES = ["introduced", "in_committee", "passed", "signed", "vetoed", "failed"];
 
 export async function getBills({
   stateId,
@@ -24,10 +42,32 @@ export async function getBills({
   page?: number;
   limit?: number;
 } = {}) {
+  // Validate inputs
+  const validatedLimit = Math.min(Math.max(limit, 1), 100); // Limit between 1-100
+  const validatedPage = Math.max(page, 0);
+  
   const conditions = [];
-  if (stateId) conditions.push(eq(bills.stateId, stateId));
-  if (status && status !== "all") conditions.push(eq(bills.status, status));
-  if (search) conditions.push(ilike(bills.title, `%${search}%`));
+  
+  // Validate stateId format (2-letter uppercase)
+  if (stateId) {
+    const stateResult = stateIdSchema.safeParse(stateId.toUpperCase());
+    if (stateResult.success) {
+      conditions.push(eq(bills.stateId, stateResult.data));
+    }
+  }
+  
+  // Validate status against whitelist
+  if (status && status !== "all" && VALID_STATUSES.includes(status)) {
+    conditions.push(eq(bills.status, status));
+  }
+  
+  // Sanitize and validate search input
+  if (search && search.trim().length > 0 && search.length <= 200) {
+    const sanitized = sanitizeSearchInput(search.trim());
+    if (sanitized.length > 0) {
+      conditions.push(ilike(bills.title, `%${sanitized}%`));
+    }
+  }
 
   const rows = await db
     .select({
@@ -44,17 +84,32 @@ export async function getBills({
     .from(bills)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(bills.updatedAt))
-    .limit(limit)
-    .offset(page * limit);
+    .limit(validatedLimit)
+    .offset(validatedPage * validatedLimit);
 
   return rows;
 }
 
 export async function getBillById(id: string, userId?: string) {
+  // Validate UUID format
+  const idResult = uuidSchema.safeParse(id);
+  if (!idResult.success) {
+    return null;
+  }
+
+  // Validate userId if provided
+  let validatedUserId: string | undefined;
+  if (userId) {
+    const userResult = uuidSchema.safeParse(userId);
+    if (userResult.success) {
+      validatedUserId = userResult.data;
+    }
+  }
+
   const [bill] = await db
     .select()
     .from(bills)
-    .where(eq(bills.id, id))
+    .where(eq(bills.id, idResult.data))
     .limit(1);
 
   if (!bill) return null;
@@ -62,7 +117,7 @@ export async function getBillById(id: string, userId?: string) {
   const [summary] = await db
     .select({ summary: billSummaries.summary })
     .from(billSummaries)
-    .where(eq(billSummaries.billId, id))
+    .where(eq(billSummaries.billId, idResult.data))
     .limit(1);
 
   const sentimentCounts = await db
@@ -71,15 +126,15 @@ export async function getBillById(id: string, userId?: string) {
       total: count(),
     })
     .from(userBillSentiments)
-    .where(eq(userBillSentiments.billId, id))
+    .where(eq(userBillSentiments.billId, idResult.data))
     .groupBy(userBillSentiments.sentiment);
 
   let userSentiment: string | null = null;
-  if (userId) {
+  if (validatedUserId) {
     const [ubs] = await db
       .select({ sentiment: userBillSentiments.sentiment })
       .from(userBillSentiments)
-      .where(and(eq(userBillSentiments.userId, userId), eq(userBillSentiments.billId, id)))
+      .where(and(eq(userBillSentiments.userId, validatedUserId), eq(userBillSentiments.billId, idResult.data)))
       .limit(1);
     userSentiment = ubs?.sentiment ?? null;
   }
@@ -96,7 +151,7 @@ export async function getBillById(id: string, userId?: string) {
     })
     .from(billVotes)
     .innerJoin(legislators, eq(billVotes.legislatorId, legislators.id))
-    .where(eq(billVotes.billId, id));
+    .where(eq(billVotes.billId, idResult.data));
 
   const supportCount = sentimentCounts.find((s) => s.sentiment === "support")?.total ?? 0;
   const opposeCount = sentimentCounts.find((s) => s.sentiment === "oppose")?.total ?? 0;
@@ -111,6 +166,8 @@ export async function getBillById(id: string, userId?: string) {
   };
 }
 
+const VALID_CHAMBERS = ["H", "S"]; // House, Senate
+
 export async function getLegislators({
   stateId,
   chamber,
@@ -124,16 +181,36 @@ export async function getLegislators({
   page?: number;
   limit?: number;
 } = {}) {
+  // Validate inputs
+  const validatedLimit = Math.min(Math.max(limit, 1), 100);
+  const validatedPage = Math.max(page, 0);
+  
   const conditions = [eq(legislators.isActive, true)];
-  if (stateId) conditions.push(eq(legislators.stateId, stateId));
-  if (chamber) conditions.push(eq(legislators.chamber, chamber));
-  if (search) {
-    conditions.push(
-      or(
-        ilike(legislators.firstName, `%${search}%`),
-        ilike(legislators.lastName, `%${search}%`)
-      )!
-    );
+  
+  // Validate stateId format (2-letter uppercase)
+  if (stateId) {
+    const stateResult = stateIdSchema.safeParse(stateId.toUpperCase());
+    if (stateResult.success) {
+      conditions.push(eq(legislators.stateId, stateResult.data));
+    }
+  }
+  
+  // Validate chamber against whitelist
+  if (chamber && VALID_CHAMBERS.includes(chamber.toUpperCase())) {
+    conditions.push(eq(legislators.chamber, chamber.toUpperCase()));
+  }
+  
+  // Sanitize and validate search input
+  if (search && search.trim().length > 0 && search.length <= 200) {
+    const sanitized = sanitizeSearchInput(search.trim());
+    if (sanitized.length > 0) {
+      conditions.push(
+        or(
+          ilike(legislators.firstName, `%${sanitized}%`),
+          ilike(legislators.lastName, `%${sanitized}%`)
+        )!
+      );
+    }
   }
 
   const rows = await db
@@ -153,13 +230,19 @@ export async function getLegislators({
     .leftJoin(representationScores, eq(legislators.id, representationScores.legislatorId))
     .where(and(...conditions))
     .orderBy(legislators.lastName, legislators.firstName)
-    .limit(limit)
-    .offset(page * limit);
+    .limit(validatedLimit)
+    .offset(validatedPage * validatedLimit);
 
   return rows;
 }
 
 export async function getLegislatorById(id: string) {
+  // Validate UUID format
+  const idResult = uuidSchema.safeParse(id);
+  if (!idResult.success) {
+    return null;
+  }
+
   const [legislator] = await db
     .select({
       id: legislators.id,
@@ -180,7 +263,7 @@ export async function getLegislatorById(id: string) {
     })
     .from(legislators)
     .leftJoin(representationScores, eq(legislators.id, representationScores.legislatorId))
-    .where(eq(legislators.id, id))
+    .where(eq(legislators.id, idResult.data))
     .limit(1);
 
   if (!legislator) return null;
@@ -197,7 +280,7 @@ export async function getLegislatorById(id: string) {
     })
     .from(billVotes)
     .innerJoin(bills, eq(billVotes.billId, bills.id))
-    .where(eq(billVotes.legislatorId, id))
+    .where(eq(billVotes.legislatorId, idResult.data))
     .orderBy(desc(billVotes.voteDate))
     .limit(20);
 
@@ -210,7 +293,7 @@ export async function getLegislatorById(id: string) {
       status: bills.status,
     })
     .from(bills)
-    .where(eq(bills.primarySponsorId, id))
+    .where(eq(bills.primarySponsorId, idResult.data))
     .orderBy(desc(bills.updatedAt))
     .limit(10);
 
@@ -218,16 +301,28 @@ export async function getLegislatorById(id: string) {
 }
 
 export async function getUserSubscription(userId: string) {
+  // Validate UUID format
+  const idResult = uuidSchema.safeParse(userId);
+  if (!idResult.success) {
+    return null;
+  }
+
   const [sub] = await db
     .select()
     .from(userSubscriptions)
-    .where(eq(userSubscriptions.userId, userId))
+    .where(eq(userSubscriptions.userId, idResult.data))
     .limit(1);
   return sub ?? null;
 }
 
 export async function isPremiumUser(userId: string): Promise<boolean> {
-  const sub = await getUserSubscription(userId);
+  // Validate UUID format
+  const idResult = uuidSchema.safeParse(userId);
+  if (!idResult.success) {
+    return false;
+  }
+
+  const sub = await getUserSubscription(idResult.data);
   if (!sub) return false;
   if (sub.tier !== "premium") return false;
   if (sub.currentPeriodEnd && sub.currentPeriodEnd < new Date()) return false;
@@ -235,6 +330,12 @@ export async function isPremiumUser(userId: string): Promise<boolean> {
 }
 
 export async function getUserVotes(userId: string) {
+  // Validate UUID format
+  const idResult = uuidSchema.safeParse(userId);
+  if (!idResult.success) {
+    return [];
+  }
+
   const rows = await db
     .select({
       id: userBillSentiments.id,
@@ -248,7 +349,7 @@ export async function getUserVotes(userId: string) {
     })
     .from(userBillSentiments)
     .innerJoin(bills, eq(userBillSentiments.billId, bills.id))
-    .where(eq(userBillSentiments.userId, userId))
+    .where(eq(userBillSentiments.userId, idResult.data))
     .orderBy(desc(userBillSentiments.updatedAt));
 
   return rows;
@@ -259,10 +360,13 @@ export async function getStates() {
 }
 
 export async function getBillsWithoutSummary(limit = 50) {
+  // Validate limit
+  const validatedLimit = Math.min(Math.max(limit, 1), 100);
+  
   const withSummary = db.select({ billId: billSummaries.billId }).from(billSummaries);
   return db
     .select({ id: bills.id, title: bills.title, description: bills.description })
     .from(bills)
     .where(sql`${bills.id} NOT IN (${withSummary})`)
-    .limit(limit);
+    .limit(validatedLimit);
 }

@@ -297,7 +297,7 @@ describe('getUserSubscription', () => {
   it('should return subscription when found', async () => {
     const mockSubscription = {
       id: '1',
-      userId: 'user-1',
+      userId: '550e8400-e29b-41d4-a716-446655440001',
       tier: 'premium',
       stripeCustomerId: 'cus_123',
       stripeSubscriptionId: 'sub_123',
@@ -316,7 +316,7 @@ describe('getUserSubscription', () => {
 
     mockSelectFn.mockReturnValue(mockQuery);
 
-    const result = await getUserSubscription('user-1');
+    const result = await getUserSubscription('550e8400-e29b-41d4-a716-446655440001');
 
     expect(result).toEqual(mockSubscription);
   });
@@ -332,7 +332,7 @@ describe('getUserSubscription', () => {
 
     mockSelectFn.mockReturnValue(mockQuery);
 
-    const result = await getUserSubscription('user-1');
+    const result = await getUserSubscription('550e8400-e29b-41d4-a716-446655440001');
 
     expect(result).toBeNull();
   });
@@ -346,7 +346,7 @@ describe('isPremiumUser', () => {
   it('should return true for active premium user', async () => {
     const mockSubscription = {
       id: '1',
-      userId: 'user-1',
+      userId: '550e8400-e29b-41d4-a716-446655440001',
       tier: 'premium',
       stripeCustomerId: 'cus_123',
       stripeSubscriptionId: 'sub_123',
@@ -365,7 +365,7 @@ describe('isPremiumUser', () => {
 
     mockSelectFn.mockReturnValue(mockQuery);
 
-    const result = await isPremiumUser('user-1');
+    const result = await isPremiumUser('550e8400-e29b-41d4-a716-446655440001');
 
     expect(result).toBe(true);
   });
@@ -373,7 +373,7 @@ describe('isPremiumUser', () => {
   it('should return false for expired premium subscription', async () => {
     const mockSubscription = {
       id: '1',
-      userId: 'user-1',
+      userId: '550e8400-e29b-41d4-a716-446655440001',
       tier: 'premium',
       stripeCustomerId: 'cus_123',
       stripeSubscriptionId: 'sub_123',
@@ -392,7 +392,7 @@ describe('isPremiumUser', () => {
 
     mockSelectFn.mockReturnValue(mockQuery);
 
-    const result = await isPremiumUser('user-1');
+    const result = await isPremiumUser('550e8400-e29b-41d4-a716-446655440001');
 
     expect(result).toBe(false);
   });
@@ -400,7 +400,7 @@ describe('isPremiumUser', () => {
   it('should return false for free tier user', async () => {
     const mockSubscription = {
       id: '1',
-      userId: 'user-1',
+      userId: '550e8400-e29b-41d4-a716-446655440001',
       tier: 'free',
       stripeCustomerId: null,
       stripeSubscriptionId: null,
@@ -419,7 +419,7 @@ describe('isPremiumUser', () => {
 
     mockSelectFn.mockReturnValue(mockQuery);
 
-    const result = await isPremiumUser('user-1');
+    const result = await isPremiumUser('550e8400-e29b-41d4-a716-446655440001');
 
     expect(result).toBe(false);
   });
@@ -435,7 +435,7 @@ describe('isPremiumUser', () => {
 
     mockSelectFn.mockReturnValue(mockQuery);
 
-    const result = await isPremiumUser('user-1');
+    const result = await isPremiumUser('550e8400-e29b-41d4-a716-446655440001');
 
     expect(result).toBe(false);
   });
@@ -450,7 +450,7 @@ describe('getUserVotes', () => {
     const mockVotes = [
       {
         id: '1',
-        billId: 'bill-1',
+        billId: '550e8400-e29b-41d4-a716-446655440003',
         billType: 'HB',
         billNumber: '100',
         title: 'Test Bill',
@@ -472,7 +472,7 @@ describe('getUserVotes', () => {
 
     mockSelectFn.mockReturnValue(mockQuery);
 
-    const result = await getUserVotes('user-1');
+    const result = await getUserVotes('550e8400-e29b-41d4-a716-446655440001');
 
     expect(result).toEqual(mockVotes);
     expect(result).toHaveLength(1);

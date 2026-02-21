@@ -35,20 +35,20 @@ export function createChainableMock(returnValue: any) {
 
 // Mock data factories
 export const createMockLegislatorVote = (overrides = {}) => ({
-  billId: 'bill-1',
+  billId: '550e8400-e29b-41d4-a716-446655440003',
   vote: 'yea',
   ...overrides,
 });
 
 export const createMockSentimentAgg = (overrides = {}) => ({
-  billId: 'bill-1',
+  billId: '550e8400-e29b-41d4-a716-446655440003',
   sentiment: 'support',
   total: 10,
   ...overrides,
 });
 
 export const createMockBill = (overrides = {}) => ({
-  id: 'bill-1',
+  id: '550e8400-e29b-41d4-a716-446655440003',
   billType: 'HB',
   billNumber: '1234',
   title: 'Test Bill',
@@ -59,7 +59,7 @@ export const createMockBill = (overrides = {}) => ({
 });
 
 export const createMockLegislator = (overrides = {}) => ({
-  id: 'leg-1',
+  id: '550e8400-e29b-41d4-a716-446655440005',
   firstName: 'John',
   lastName: 'Doe',
   party: 'D',

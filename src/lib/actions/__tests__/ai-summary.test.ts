@@ -52,7 +52,7 @@ describe('requestBillSummary', () => {
     });
     vi.mocked(db).select = mockSelect;
 
-    const result = await requestBillSummary('bill-1');
+    const result = await requestBillSummary('550e8400-e29b-41d4-a716-446655440003');
 
     expect(result).toEqual({ summary: existingSummary });
     expect(generateBillSummary).not.toHaveBeenCalled();
@@ -84,7 +84,7 @@ describe('requestBillSummary', () => {
     });
     vi.mocked(db).select = mockSelect;
 
-    const result = await requestBillSummary('bill-1');
+    const result = await requestBillSummary('550e8400-e29b-41d4-a716-446655440003');
 
     expect(result).toEqual({ error: 'Bill not found' });
   });
@@ -121,15 +121,15 @@ describe('requestBillSummary', () => {
     });
     vi.mocked(db).select = mockSelect;
 
-    const result = await requestBillSummary('bill-1');
+    const result = await requestBillSummary('550e8400-e29b-41d4-a716-446655440003');
 
     expect(result).toEqual({ summary: generatedSummary });
     expect(generateBillSummary).toHaveBeenCalledWith({
-      billId: 'bill-1',
+      billId: '550e8400-e29b-41d4-a716-446655440003',
       title: 'Test Bill',
       description: 'This is a test bill',
     });
-    expect(revalidatePath).toHaveBeenCalledWith('/bills/bill-1');
+    expect(revalidatePath).toHaveBeenCalledWith('/bills/550e8400-e29b-41d4-a716-446655440003');
   });
 
   it('should handle AI summary generation error', async () => {
@@ -161,7 +161,7 @@ describe('requestBillSummary', () => {
     });
     vi.mocked(db).select = mockSelect;
 
-    const result = await requestBillSummary('bill-1');
+    const result = await requestBillSummary('550e8400-e29b-41d4-a716-446655440003');
 
     expect(result).toEqual({ error: 'Failed to generate summary.' });
   });
