@@ -158,7 +158,8 @@ informed-citizenry/
 │   │   │   │   └── update-scores/      # Update representation scores
 │   │   │   └── stripe/          # Stripe checkout & webhooks
 │   │   ├── (main)/             # Main app pages (authenticated)
-│   │   │   ├── page.tsx         # Home/dashboard
+│   │   │   ├── page.tsx         # Landing/home page
+│   │   │   ├── dashboard/       # Authenticated user dashboard
 │   │   │   ├── bills/           # Bill listings & details
 │   │   │   ├── legislators/     # Legislator listings & profiles
 │   │   │   ├── my-votes/        # User's recorded sentiments
@@ -208,7 +209,7 @@ informed-citizenry/
 ### AI Bill Summaries (Anthropic Claude)
 - **Purpose**: Generate plain-English summaries of complex legislation
 - **Trigger**: Cron job via `/api/cron/generate-summaries`
-- **Model**: Claude 3.x series
+- **Model**: Claude Haiku 4.5 (`claude-haiku-4-5-20251001`)
 
 ### Representation Scoring
 - **Purpose**: Calculate how well legislators represent constituent views
