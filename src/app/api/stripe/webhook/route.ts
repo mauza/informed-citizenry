@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 import { db } from "@/db";
 import { userSubscriptions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import type Stripe from "stripe";
 
+// Force this route to be dynamic and not statically generated
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
+  const stripe = getStripe();
   const body = await req.text();
   const sig = req.headers.get("stripe-signature")!;
 

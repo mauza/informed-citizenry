@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { createCheckoutSession, PREMIUM_PRICE_ID } from "@/lib/stripe";
+import { getStripe, getPremiumPriceId, createCheckoutSession } from "@/lib/stripe";
+
+// Force this route to be dynamic and not statically generated
+export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -11,10 +14,12 @@ export async function POST(req: NextRequest) {
   const origin = req.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
   try {
+    const stripe = getStripe();
+    const priceId = getPremiumPriceId();
     const checkoutSession = await createCheckoutSession({
       userId: session.user.id,
       email: session.user.email,
-      priceId: PREMIUM_PRICE_ID,
+      priceId,
       successUrl: `${origin}/settings?upgraded=1`,
       cancelUrl: `${origin}/settings`,
     });

@@ -15,6 +15,10 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PUBLIC_APP_URL=http://localhost:3000
+# Dummy DATABASE_URL for build-time only (not used at runtime)
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+ENV STRIPE_SECRET_KEY="sk_test_dummy"
+ENV STRIPE_PREMIUM_PRICE_ID="price_dummy"
 RUN npm run build
 
 # ─── Stage 3: Production runner ──────────────────────────────────────────────
