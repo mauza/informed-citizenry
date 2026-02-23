@@ -15,11 +15,6 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PUBLIC_APP_URL=http://localhost:3000
-# Dummy values for build-time only (not used at runtime)
-# These satisfy build-time type checking without exposing real secrets
-ENV NEXT_BUILD_DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
-ENV NEXT_BUILD_STRIPE_KEY="sk_test_dummy_build_only"
-ENV NEXT_BUILD_STRIPE_PRICE="price_dummy_build_only"
 RUN npm run build
 
 # ─── Stage 3: Production runner ──────────────────────────────────────────────

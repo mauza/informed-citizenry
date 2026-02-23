@@ -31,12 +31,6 @@ describe('Docker Configuration', () => {
       expect(content).toContain('NEXT_TELEMETRY_DISABLED=1');
     });
 
-    it('should set dummy DATABASE_URL for build', () => {
-      const dockerfilePath = path.join(projectRoot, 'Dockerfile');
-      const content = fs.readFileSync(dockerfilePath, 'utf-8');
-      expect(content).toContain('DATABASE_URL');
-    });
-
     it('should expose port 3000', () => {
       const dockerfilePath = path.join(projectRoot, 'Dockerfile');
       const content = fs.readFileSync(dockerfilePath, 'utf-8');
