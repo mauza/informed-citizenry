@@ -16,12 +16,20 @@ async function globalSetup(_config: FullConfig) {
 
   console.log("🔐 Creating authenticated session via test API...");
 
-  await page.request.post(`${baseURL}/api/test/session`, {
+  const sessionResponse = await page.request.post(`${baseURL}/api/test/session`, {
     data: {
       email: "e2e-test@example.com",
       name: "E2E Test User",
     },
   });
+
+  if (!sessionResponse.ok()) {
+    const body = await sessionResponse.text();
+    throw new Error(
+      `Failed to create test session (HTTP ${sessionResponse.status()}). ` +
+      `Is E2E_TESTING=true set on the server? Response: ${body}`
+    );
+  }
 
   await page.goto(`${baseURL}/dashboard`);
 

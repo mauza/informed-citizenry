@@ -32,15 +32,10 @@ export default defineConfig({
     {
       name: "authenticated",
       testMatch: /.*authenticated.*|.*sentiment.*/,
-      dependencies: ["setup"],
       use: {
         ...devices["Desktop Chrome"],
         storageState: "./tests/.auth/user.json",
       },
-    },
-    {
-      name: "setup",
-      testMatch: /global\.setup\.ts/,
     },
   ],
 
@@ -51,5 +46,8 @@ export default defineConfig({
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
+    env: process.env.E2E_USE_DOCKER
+      ? {}
+      : { E2E_TESTING: "true" },
   },
 });

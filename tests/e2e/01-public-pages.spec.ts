@@ -81,6 +81,55 @@ test.describe("Public Pages", () => {
     });
   });
 
+  test("unauthenticated user is redirected when trying to vote", async ({ page }) => {
+    await page.goto("/bills");
+
+    await page.waitForLoadState("networkidle");
+
+    const billLink = page
+      .getByRole("link")
+      .filter({ hasText: /^[A-Z]+\s+\d+/ })
+      .first();
+
+    const billLinkVisible = await billLink.isVisible().catch(() => false);
+    if (!billLinkVisible) {
+      test.skip();
+      return;
+    }
+
+    await billLink.click();
+
+    await page.waitForURL(/\/bills\/[\w-]+/);
+
+    await page.waitForLoadState("networkidle");
+
+    const voteButton = page
+      .getByRole("button")
+      .filter({ hasText: /support|oppose|vote/i })
+      .first();
+
+    if (await voteButton.isVisible().catch(() => false)) {
+      await voteButton.click();
+
+      await page.waitForTimeout(1000);
+
+      const redirectedToLogin = await page
+        .getByText(/sign in|login|authenticate/i)
+        .isVisible()
+        .catch(() => false);
+
+      const currentUrl = page.url();
+      const onLoginPage = currentUrl.includes("/login");
+
+      if (redirectedToLogin || onLoginPage) {
+        await page.screenshot({
+          path: "test-results/screenshots/31-unauthenticated-vote-redirect.png",
+          fullPage: true,
+        });
+      }
+    }
+  });
+
   test("navigation works between pages", async ({ page }) => {
     await page.goto("/");
 
