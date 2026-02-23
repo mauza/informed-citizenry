@@ -5,6 +5,9 @@ import { getMasterList, getSessionList, getBill, getRollCall, mapLegiscanStatus 
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
+// Force this route to be dynamic and not statically generated
+export const dynamic = "force-dynamic";
+
 function authCheck(req: NextRequest) {
   const auth = req.headers.get("authorization");
   return auth === `Bearer ${process.env.CRON_SECRET}`;

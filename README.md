@@ -88,6 +88,63 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) to see the app.
 
+## Docker
+
+Docker provides an alternative way to run the application locally without installing Node.js directly on your machine. The container runs the Next.js production server using standalone output mode.
+
+> **Note:** All external services (Neon DB, GitHub OAuth, Resend, LegiScan, Anthropic, Stripe) remain cloud-hosted. You still need valid API credentials in `.env.local`.
+
+### Prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine + Compose plugin on Linux)
+
+### 1. Set up environment variables
+
+If you have not already done so, copy the example file and fill in your credentials:
+
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local` and replace all placeholder values with real credentials. See [Environment Variables](#environment-variables) for details on each variable.
+
+### 2. Build and start the container
+
+```bash
+docker compose up --build
+```
+
+This command:
+- Builds a multi-stage Docker image (deps → builder → runner)
+- Runs `next build` inside the `builder` stage using standalone output mode
+- Starts a minimal production container that reads from `.env.local`
+
+The app will be available at [http://localhost:3000](http://localhost:3000).
+
+### 3. Stop the container
+
+```bash
+docker compose down
+```
+
+### One-off docker build and run (without Compose)
+
+```bash
+# Build the image
+docker build -t informed-citizenry .
+
+# Run the container, loading variables from .env.local
+docker run --env-file .env.local -p 3000:3000 informed-citizenry
+```
+
+### Notes
+
+- **Production mode only:** The Docker setup runs the standalone `server.js`. Hot module replacement (HMR) is not available. For active development with HMR, use `npm run dev` directly.
+- **Database migrations:** Run `npm run db:push` from your local machine (not inside Docker) to push schema changes to Neon before starting the container.
+- **NEXT_PUBLIC_APP_URL:** This variable is inlined into JavaScript bundles at build time. If you change it, rebuild the image with `docker compose up --build`.
+- **Stripe webhooks locally:** Use the [Stripe CLI](https://stripe.com/docs/stripe-cli) to forward webhook events to the running container: `stripe listen --forward-to localhost:3000/api/stripe/webhook`.
+- **GitHub OAuth callback URL:** Ensure your GitHub OAuth App's "Authorization callback URL" is set to `http://localhost:3000/api/auth/callback/github`.
+
 ## Environment Variables
 
 | Variable | Required | Description | Where to Get It |

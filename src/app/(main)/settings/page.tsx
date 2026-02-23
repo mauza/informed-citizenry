@@ -6,9 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { updateProfile } from "@/lib/actions/profile";
+import { updateProfile as updateProfileAction } from "@/lib/actions/profile";
 import { UpgradeButton } from "@/components/upgrade-button";
 import { db } from "@/db";
+
+async function updateProfile(formData: FormData): Promise<void> {
+  "use server";
+  await updateProfileAction(formData);
+}
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -117,11 +122,12 @@ function ManageBillingButton({ customerId }: { customerId: string }) {
     <form
       action={async () => {
         "use server";
-        const { createBillingPortalSession } = await import("@/lib/stripe");
+        const { getStripe } = await import("@/lib/stripe");
         const { redirect } = await import("next/navigation");
-        const session = await createBillingPortalSession({
-          customerId,
-          returnUrl: `${process.env.NEXT_PUBLIC_APP_URL}/settings`,
+        const stripe = getStripe();
+        const session = await stripe.billingPortal.sessions.create({
+          customer: customerId,
+          return_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings`,
         });
         redirect(session.url);
       }}

@@ -4,6 +4,9 @@ import { legislators } from "@/db/schema";
 import { updateRepresentationScore } from "@/lib/representation-score";
 import { eq } from "drizzle-orm";
 
+// Force this route to be dynamic and not statically generated
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {

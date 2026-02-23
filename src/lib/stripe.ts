@@ -1,10 +1,27 @@
 import Stripe from "stripe";
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2026-01-28.clover" as Stripe.LatestApiVersion,
-});
+let stripeInstance: Stripe | null = null;
 
-export const PREMIUM_PRICE_ID = process.env.STRIPE_PREMIUM_PRICE_ID!;
+export function getStripe(): Stripe {
+  if (!stripeInstance) {
+    const apiKey = process.env.STRIPE_SECRET_KEY;
+    if (!apiKey) {
+      throw new Error("STRIPE_SECRET_KEY environment variable is required");
+    }
+    stripeInstance = new Stripe(apiKey, {
+      apiVersion: "2026-01-28.clover" as Stripe.LatestApiVersion,
+    });
+  }
+  return stripeInstance;
+}
+
+export function getPremiumPriceId(): string {
+  const priceId = process.env.STRIPE_PREMIUM_PRICE_ID;
+  if (!priceId) {
+    throw new Error("STRIPE_PREMIUM_PRICE_ID environment variable is required");
+  }
+  return priceId;
+}
 
 export async function createCheckoutSession({
   userId,
@@ -19,6 +36,7 @@ export async function createCheckoutSession({
   successUrl: string;
   cancelUrl: string;
 }) {
+  const stripe = getStripe();
   return stripe.checkout.sessions.create({
     mode: "subscription",
     customer_email: email,
@@ -37,6 +55,7 @@ export async function createBillingPortalSession({
   customerId: string;
   returnUrl: string;
 }) {
+  const stripe = getStripe();
   return stripe.billingPortal.sessions.create({
     customer: customerId,
     return_url: returnUrl,
