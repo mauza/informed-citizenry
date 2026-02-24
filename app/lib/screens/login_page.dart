@@ -29,19 +29,19 @@ class LoginPageState extends State<LoginPage> {
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     setState(() {
       _isLoading = true;
       _error = null;
     });
-    
+
     try {
       final response = await _authService.signIn(
         email: _emailController.text,
         password: _passwordController.text,
       );
-      
-      if (response.session != null && mounted) {
+
+      if (response.token.isNotEmpty && mounted) {
         Navigator.pushReplacementNamed(context, AppConstants.profileRoute);
       }
     } catch (error) {
@@ -71,7 +71,8 @@ class LoginPageState extends State<LoginPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Password reset email sent. Please check your inbox.'),
+            content:
+                Text('Password reset email sent. Please check your inbox.'),
             backgroundColor: Colors.green,
           ),
         );
@@ -94,9 +95,10 @@ class LoginPageState extends State<LoginPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Login')),
       body: _isLoading
-          ? LoadingState(message: _passwordController.text.isEmpty 
-              ? 'Sending password reset email...' 
-              : 'Logging in...')
+          ? LoadingState(
+              message: _passwordController.text.isEmpty
+                  ? 'Sending password reset email...'
+                  : 'Logging in...')
           : SingleChildScrollView(
               child: Center(
                 child: Container(
@@ -112,18 +114,24 @@ class LoginPageState extends State<LoginPage> {
                           const SizedBox(height: 48),
                           Text(
                             AppConstants.appName,
-                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).primaryColor,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).primaryColor,
+                                ),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 8),
                           Text(
                             AppConstants.loginWelcomeMessage,
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: Colors.grey[600],
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  color: Colors.grey[600],
+                                ),
                             textAlign: TextAlign.center,
                           ),
                           if (_error != null) ...[
@@ -200,7 +208,8 @@ class LoginPageState extends State<LoginPage> {
                                       context,
                                       AppConstants.signUpRoute,
                                     ),
-                            child: const Text('Don\'t have an account? Sign up instead'),
+                            child: const Text(
+                                'Don\'t have an account? Sign up instead'),
                           ),
                         ],
                       ),
@@ -211,4 +220,4 @@ class LoginPageState extends State<LoginPage> {
             ),
     );
   }
-} 
+}
