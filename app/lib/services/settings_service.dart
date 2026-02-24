@@ -7,7 +7,7 @@ class SettingsService implements ISettingsService {
   final PocketBase _pb;
 
   SettingsService([PocketBase? pb])
-    : _pb = pb ?? PocketBase('http://localhost:8090');
+      : _pb = pb ?? PocketBase('http://localhost:8090');
 
   String get _userId {
     final userId = _pb.authStore.model?.id;
@@ -20,9 +20,10 @@ class SettingsService implements ISettingsService {
   @override
   Future<Settings?> getUserSettings(String userId) async {
     try {
-      final records = await _pb
-          .collection('settings')
-          .getList(filter: 'user = "$userId"', page: 1, perPage: 1);
+      final records = await _pb.collection('settings').getList(
+          filter: _pb.filter('user = {:userId}', {'userId': userId}),
+          page: 1,
+          perPage: 1);
 
       if (records.items.isEmpty) {
         return null;
@@ -60,9 +61,10 @@ class SettingsService implements ISettingsService {
   @override
   Future<UserProfile?> getUserProfile(String userId) async {
     try {
-      final records = await _pb
-          .collection('user_profiles')
-          .getList(filter: 'user = "$userId"', page: 1, perPage: 1);
+      final records = await _pb.collection('user_profiles').getList(
+          filter: _pb.filter('user = {:userId}', {'userId': userId}),
+          page: 1,
+          perPage: 1);
 
       if (records.items.isEmpty) {
         return null;

@@ -65,22 +65,17 @@ class _MyAppState extends State<MyApp> {
   void _handleWebDeepLink() {
     // Get the current URL
     final uri = Uri.base;
-    print('Web deep link handler called with URI: ${uri.toString()}');
 
     // Check if we're on a reset password route and have the token
     if (uri.fragment.startsWith('reset-password') ||
         uri.fragment.startsWith('/reset-password')) {
-      print('Found reset-password fragment');
       // Extract the token from the fragment
       final params = Uri.parse(uri.fragment).queryParameters;
       final token = params['token'];
       final email = params['email'];
-      print('Token from fragment: $token');
-      print('Email from fragment: $email');
 
       if (token != null && email != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          print('Navigating to reset password page with token and email');
           _navigatorKey.currentState?.pushNamed(
             AppConstants.resetPasswordRoute,
             arguments: {'token': token, 'email': email},
@@ -91,16 +86,12 @@ class _MyAppState extends State<MyApp> {
   }
 
   void _handleUri(Uri uri) {
-    print('Mobile deep link handler called with URI: ${uri.toString()}');
     if (!kIsWeb &&
         uri.scheme == 'guru.mau.happyinvesting' &&
         uri.host == 'reset-callback') {
-      print('Found reset-callback URI');
       // Extract the token from the query parameters
       final token = uri.queryParameters['token'];
       final email = uri.queryParameters['email'];
-      print('Token from query: $token');
-      print('Email from query: $email');
 
       if (token != null && email != null) {
         _navigatorKey.currentState?.pushNamed(

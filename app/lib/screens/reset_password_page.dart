@@ -33,7 +33,6 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     final token = args?['token'] as String?;
 
     if (token == null) {
-      print('Missing token');
       // No token, redirect to login
       Navigator.pushReplacementNamed(context, AppConstants.loginRoute);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -47,7 +46,6 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
       return;
     }
 
-    print('Got token: ${token.substring(0, 20)}...');
     setState(() {
       _token = token;
     });
@@ -69,7 +67,6 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     });
 
     try {
-      print('Attempting to confirm password reset...');
       final args =
           ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       final token = args?['token'] as String?;
@@ -83,7 +80,6 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
         token: token,
         password: _passwordController.text,
       );
-      print('Password reset confirmed successfully');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -95,7 +91,6 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
         Navigator.pushReplacementNamed(context, AppConstants.loginRoute);
       }
     } catch (error) {
-      print('Failed to update password: $error');
       if (mounted) {
         setState(() {
           _error = error;
@@ -133,7 +128,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                         children: [
                           Text(
                             'Create New Password',
-                            style: Theme.of(context).textTheme.headlineMedium
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineMedium
                                 ?.copyWith(
                                   fontWeight: FontWeight.bold,
                                   color: Theme.of(context).primaryColor,
@@ -143,7 +140,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                           const SizedBox(height: 8),
                           Text(
                             'Please enter your new password below',
-                            style: Theme.of(context).textTheme.titleMedium
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
                                 ?.copyWith(color: Colors.grey[600]),
                             textAlign: TextAlign.center,
                           ),
