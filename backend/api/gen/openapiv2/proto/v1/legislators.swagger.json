@@ -1,13 +1,13 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "Districts API",
-    "description": "API for retrieving Utah district and representative information by GPS location",
+    "title": "Legislators API",
+    "description": "API for querying Utah state legislators",
     "version": "1.0"
   },
   "tags": [
     {
-      "name": "DistrictService"
+      "name": "LegislatorService"
     }
   ],
   "consumes": [
@@ -17,15 +17,14 @@
     "application/json"
   ],
   "paths": {
-    "/v1/districts/location": {
+    "/v1/legislators": {
       "get": {
-        "summary": "GetDistrictFromLocation returns the house and senate representatives\nfor the Utah address closest to the provided GPS coordinates.",
-        "operationId": "DistrictService_GetDistrictFromLocation",
+        "operationId": "LegislatorService_ListLegislators",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1GetDistrictFromLocationResponse"
+              "$ref": "#/definitions/v1ListLegislatorsResponse"
             }
           },
           "default": {
@@ -37,41 +36,50 @@
         },
         "parameters": [
           {
-            "name": "location.latitude",
+            "name": "chamber",
+            "description": "Optional: \"house\" or \"senate\". Returns all if omitted.",
             "in": "query",
             "required": false,
-            "type": "number",
-            "format": "double"
-          },
-          {
-            "name": "location.longitude",
-            "in": "query",
-            "required": false,
-            "type": "number",
-            "format": "double"
+            "type": "string"
           }
         ],
         "tags": [
-          "DistrictService"
+          "LegislatorService"
+        ]
+      }
+    },
+    "/v1/legislators/{id}": {
+      "get": {
+        "operationId": "LegislatorService_GetLegislator",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetLegislatorResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "LegislatorService"
         ]
       }
     }
   },
   "definitions": {
-    "apiV1Location": {
-      "type": "object",
-      "properties": {
-        "latitude": {
-          "type": "number",
-          "format": "double"
-        },
-        "longitude": {
-          "type": "number",
-          "format": "double"
-        }
-      },
-      "description": "Location represents a geographic coordinate."
-    },
     "protobufAny": {
       "type": "object",
       "properties": {
@@ -100,41 +108,13 @@
         }
       }
     },
-    "v1District": {
+    "v1GetLegislatorResponse": {
       "type": "object",
       "properties": {
-        "districtId": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "chamber": {
-          "type": "string",
-          "title": "\"house\" or \"senate\""
-        },
-        "districtNumber": {
-          "type": "integer",
-          "format": "int32"
-        },
         "legislator": {
-          "$ref": "#/definitions/v1Legislator",
-          "title": "current representative for this district"
+          "$ref": "#/definitions/v1Legislator"
         }
-      },
-      "description": "District represents a Utah legislative district with its current representative."
-    },
-    "v1GetDistrictFromLocationResponse": {
-      "type": "object",
-      "properties": {
-        "houseDistrict": {
-          "$ref": "#/definitions/v1District"
-        },
-        "senateDistrict": {
-          "$ref": "#/definitions/v1District"
-        }
-      },
-      "description": "GetDistrictFromLocationResponse returns both the House and Senate districts\nfor a given GPS location, including the representative for each."
+      }
     },
     "v1Legislator": {
       "type": "object",
@@ -173,6 +153,18 @@
         }
       },
       "description": "Legislator represents a current Utah House or Senate member."
+    },
+    "v1ListLegislatorsResponse": {
+      "type": "object",
+      "properties": {
+        "legislators": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Legislator"
+          }
+        }
+      }
     }
   }
 }

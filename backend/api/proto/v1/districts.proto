@@ -2,50 +2,53 @@ syntax = "proto3";
 
 package api.v1;
 
-option go_package = "api/gen/go/api/v1;apiv1";
+option go_package = "api/gen/go/proto/v1;apiv1";
 
 import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
+import "proto/v1/legislators.proto";
 
-// Enable custom OpenAPI annotations
 option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   info: {
     title: "Districts API";
     version: "1.0";
-    description: "API for retrieving district information based on location";
+    description: "API for retrieving Utah district and representative information by GPS location";
   }
 };
 
-// Location message represents a geographical point
+// Location represents a geographic coordinate.
 message Location {
-  double latitude = 1;
+  double latitude  = 1;
   double longitude = 2;
 }
 
-// District message represents district information
+// District represents a Utah legislative district with its current representative.
 message District {
-  string district_id = 1;
-  string name = 2;
-  string state = 3;
-  // Add more fields as needed
+  string     district_id     = 1;
+  string     name            = 2;
+  string     chamber         = 3; // "house" or "senate"
+  int32      district_number = 4;
+  Legislator legislator      = 5; // current representative for this district
 }
 
-// Request message for GetDistrictFromLocation
 message GetDistrictFromLocationRequest {
   Location location = 1;
 }
 
-// Response message for GetDistrictFromLocation
+// GetDistrictFromLocationResponse returns both the House and Senate districts
+// for a given GPS location, including the representative for each.
 message GetDistrictFromLocationResponse {
-  District district = 1;
+  District house_district  = 1;
+  District senate_district = 2;
 }
 
-// DistrictService provides methods for retrieving district information
+// DistrictService provides methods for retrieving Utah district information.
 service DistrictService {
-  // GetDistrictFromLocation returns district information for a given location
+  // GetDistrictFromLocation returns the house and senate representatives
+  // for the Utah address closest to the provided GPS coordinates.
   rpc GetDistrictFromLocation(GetDistrictFromLocationRequest) returns (GetDistrictFromLocationResponse) {
     option (google.api.http) = {
       get: "/v1/districts/location"
     };
   }
-} 
+}

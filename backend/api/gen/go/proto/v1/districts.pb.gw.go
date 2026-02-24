@@ -42,6 +42,9 @@ func request_DistrictService_GetDistrictFromLocation_0(ctx context.Context, mars
 		protoReq GetDistrictFromLocationRequest
 		metadata runtime.ServerMetadata
 	)
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
 	if err := req.ParseForm(); err != nil {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}

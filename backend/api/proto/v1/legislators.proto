@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package api.v1;
+
+option go_package = "api/gen/go/proto/v1;apiv1";
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Legislators API";
+    version: "1.0";
+    description: "API for querying Utah state legislators";
+  }
+};
+
+// Legislator represents a current Utah House or Senate member.
+message Legislator {
+  string id             = 1;
+  string chamber        = 2; // "house" or "senate"
+  int32  district_number = 3;
+  string first_name     = 4;
+  string last_name      = 5;
+  string party          = 6;
+  string email          = 7;
+  string phone          = 8;
+  string website        = 9;
+  string image_url      = 10;
+}
+
+// ListLegislatorsRequest allows filtering legislators by chamber.
+message ListLegislatorsRequest {
+  // Optional: "house" or "senate". Returns all if omitted.
+  string chamber = 1;
+}
+
+message ListLegislatorsResponse {
+  repeated Legislator legislators = 1;
+}
+
+message GetLegislatorRequest {
+  string id = 1;
+}
+
+message GetLegislatorResponse {
+  Legislator legislator = 1;
+}
+
+// LegislatorService provides access to Utah state legislators.
+service LegislatorService {
+  rpc ListLegislators(ListLegislatorsRequest) returns (ListLegislatorsResponse) {
+    option (google.api.http) = {
+      get: "/v1/legislators"
+    };
+  }
+
+  rpc GetLegislator(GetLegislatorRequest) returns (GetLegislatorResponse) {
+    option (google.api.http) = {
+      get: "/v1/legislators/{id}"
+    };
+  }
+}
