@@ -1,63 +1,80 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:pocketbase/pocketbase.dart';
 import 'i_auth_service.dart';
 
 class AuthService implements IAuthService {
-  final SupabaseClient _client;
-  
-  AuthService([SupabaseClient? client]) : _client = client ?? Supabase.instance.client;
+  final PocketBase _pb;
+
+  AuthService([PocketBase? pb])
+    : _pb = pb ?? PocketBase('http://localhost:8090');
 
   String get _redirectUrl {
-    if (kIsWeb) return '/#/reset-password';
-    return 'reset-callback';
+    if (kIsWeb) return '${Uri.base.origin}/#/reset-password';
+    return 'guru.mau.happyinvesting://reset-callback';
   }
 
   @override
-  Future<AuthResponse> signUp({
+  Future<RecordAuth> signUp({
     required String email,
     required String password,
   }) async {
-    return await _client.auth.signUp(
-      email: email,
-      password: password,
-    );
+    final body = {
+      'email': email,
+      'password': password,
+      'passwordConfirm': password,
+    };
+
+    await _pb.collection('users').create(body: body);
+
+    return await _pb.collection('users').authWithPassword(email, password);
   }
 
   @override
-  Future<AuthResponse> signIn({
+  Future<RecordAuth> signIn({
     required String email,
     required String password,
   }) async {
-    return await _client.auth.signInWithPassword(
-      email: email,
-      password: password,
-    );
+    return await _pb.collection('users').authWithPassword(email, password);
   }
 
   @override
   Future<void> signOut() async {
-    await _client.auth.signOut();
+    _pb.authStore.clear();
   }
 
   @override
-  User? get currentUser => _client.auth.currentUser;
+  RecordModel? get currentUser => _pb.authStore.model;
 
   @override
-  Stream<AuthState> get authStateChanges => _client.auth.onAuthStateChange;
+  Stream<AuthStoreEvent> get authStateChanges => _pb.authStore.onChange;
 
   @override
   Future<void> resetPassword({required String email}) async {
-    print('Sending reset password email with redirect URL: $_redirectUrl');
-    await _client.auth.resetPasswordForEmail(
-      email,
-      redirectTo: _redirectUrl,
-    );
+    await _pb.collection('users').requestPasswordReset(email);
+  }
+
+  @override
+  Future<void> confirmPasswordReset({
+    required String token,
+    required String password,
+  }) async {
+    await _pb
+        .collection('users')
+        .confirmPasswordReset(token, password, password);
   }
 
   @override
   Future<void> updatePassword({required String password}) async {
-    await _client.auth.updateUser(
-      UserAttributes(password: password),
-    );
+    final userId = _pb.authStore.model?.id;
+    if (userId == null) {
+      throw Exception('No authenticated user');
+    }
+
+    await _pb
+        .collection('users')
+        .update(
+          userId,
+          body: {'password': password, 'passwordConfirm': password},
+        );
   }
-} 
+}

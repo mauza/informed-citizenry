@@ -1,23 +1,22 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:pocketbase/pocketbase.dart';
 
 abstract class IAuthService {
-  Future<AuthResponse> signUp({
-    required String email,
-    required String password,
-  });
+  Future<RecordAuth> signUp({required String email, required String password});
 
-  Future<AuthResponse> signIn({
-    required String email,
-    required String password,
-  });
+  Future<RecordAuth> signIn({required String email, required String password});
 
   Future<void> signOut();
 
-  User? get currentUser;
+  RecordModel? get currentUser;
 
-  Stream<AuthState> get authStateChanges;
+  Stream<AuthStoreEvent> get authStateChanges;
 
   Future<void> resetPassword({required String email});
 
+  Future<void> confirmPasswordReset({
+    required String token,
+    required String password,
+  });
+
   Future<void> updatePassword({required String password});
-} 
+}

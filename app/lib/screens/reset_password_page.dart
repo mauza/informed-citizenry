@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:informed_citizenry_app/components/common/error_display.dart';
 import 'package:informed_citizenry_app/components/common/loading_state.dart';
+import 'package:informed_citizenry_app/services/auth_service.dart';
 import 'package:informed_citizenry_app/utils/constants.dart';
 import 'package:informed_citizenry_app/utils/snackbar_utils.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ResetPasswordPage extends StatefulWidget {
   @override
@@ -14,40 +14,42 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   final _formKey = GlobalKey<FormState>();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _authService = AuthService();
   bool _isLoading = false;
   dynamic _error;
-  String? _accessToken;
+  String? _token;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _checkAccessToken();
+      await _checkToken();
     });
   }
 
-  Future<void> _checkAccessToken() async {
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    final accessToken = args?['access_token'] as String?;
-    final refreshToken = args?['refresh_token'] as String?;
+  Future<void> _checkToken() async {
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final token = args?['token'] as String?;
 
-    if (accessToken == null || refreshToken == null) {
-      print('Missing tokens - Access Token: ${accessToken != null}, Refresh Token: ${refreshToken != null}');
-      // No tokens, redirect to login
+    if (token == null) {
+      print('Missing token');
+      // No token, redirect to login
       Navigator.pushReplacementNamed(context, AppConstants.loginRoute);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Invalid or expired password reset link. Please try again.'),
+          content: Text(
+            'Invalid or expired password reset link. Please try again.',
+          ),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
 
-    print('Got access token: ${accessToken.substring(0, 20)}...');
-    print('Got refresh token: ${refreshToken.substring(0, 10)}...');
+    print('Got token: ${token.substring(0, 20)}...');
     setState(() {
-      _accessToken = accessToken;
+      _token = token;
     });
   }
 
@@ -67,34 +69,22 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     });
 
     try {
-      print('Attempting to verify recovery token and update password...');
-      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-      final accessToken = args?['access_token'] as String?;
-      final email = args?['email'] as String?;
-      
-      if (accessToken == null) {
-        throw Exception('Missing access token');
-      }
-      if (email == null) {
-        throw Exception('Missing email');
+      print('Attempting to confirm password reset...');
+      final args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      final token = args?['token'] as String?;
+
+      if (token == null) {
+        throw Exception('Missing reset token');
       }
 
-      // First verify the recovery token
-      await Supabase.instance.client.auth.verifyOTP(
-        type: OtpType.recovery,
-        token: accessToken,
-        email: email,
+      // Confirm the password reset using PocketBase
+      await _authService.confirmPasswordReset(
+        token: token,
+        password: _passwordController.text,
       );
-      print('Recovery token verified successfully');
+      print('Password reset confirmed successfully');
 
-      // Now update the password
-      await Supabase.instance.client.auth.updateUser(
-        UserAttributes(
-          password: _passwordController.text,
-        ),
-      );
-      print('Password updated successfully');
-      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -118,8 +108,8 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Show loading while checking access token
-    if (_accessToken == null) {
+    // Show loading while checking token
+    if (_token == null) {
       return const Scaffold(
         body: LoadingState(message: 'Verifying reset password link...'),
       );
@@ -143,26 +133,23 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                         children: [
                           Text(
                             'Create New Password',
-                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).primaryColor,
-                            ),
+                            style: Theme.of(context).textTheme.headlineMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).primaryColor,
+                                ),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 8),
                           Text(
                             'Please enter your new password below',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: Colors.grey[600],
-                            ),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(color: Colors.grey[600]),
                             textAlign: TextAlign.center,
                           ),
                           if (_error != null) ...[
                             const SizedBox(height: 24),
-                            ErrorDisplay(
-                              error: _error,
-                              showRetry: false,
-                            ),
+                            ErrorDisplay(error: _error, showRetry: false),
                           ],
                           const SizedBox(height: 48),
                           TextFormField(
@@ -220,4 +207,4 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
             ),
     );
   }
-} 
+}

@@ -7,7 +7,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/models"
 )
 
 // BillInfo represents the common bill information across different states
@@ -50,18 +52,43 @@ func (w *WashingtonScraper) FetchBills(ctx context.Context) ([]BillInfo, error) 
 }
 
 func main() {
-	// Get database URL from environment variable
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		log.Fatal("DATABASE_URL environment variable is required")
+	// Get PocketBase data directory
+	pbDataDir := os.Getenv("PB_DATA_DIR")
+	if pbDataDir == "" {
+		pbDataDir = "./pb_data"
 	}
 
-	// Connect to the database
-	conn, err := pgx.Connect(context.Background(), dbURL)
+	// Initialize PocketBase
+	app := pocketbase.New()
+
+	// Set data directory
+	app.RootCmd.PersistentFlags().String("dir", pbDataDir, "PocketBase data directory")
+
+	// Start PocketBase briefly to initialize the DAO
+	go func() {
+		if err := app.Start(); err != nil {
+			log.Fatalf("Failed to start PocketBase: %v", err)
+		}
+	}()
+
+	// Wait a moment for initialization
+	time.Sleep(1 * time.Second)
+
+	// Get collections
+	statesCollection, err := app.Dao().FindCollectionByNameOrId("states")
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v\n", err)
+		log.Fatalf("States collection not found: %v", err)
 	}
-	defer conn.Close(context.Background())
+
+	billsCollection, err := app.Dao().FindCollectionByNameOrId("bills")
+	if err != nil {
+		log.Fatalf("Bills collection not found: %v", err)
+	}
+
+	repsCollection, err := app.Dao().FindCollectionByNameOrId("representatives")
+	if err != nil {
+		log.Fatalf("Representatives collection not found: %v", err)
+	}
 
 	// Create a slice of scrapers for different states
 	scrapers := []StateLegislatureScraper{
@@ -75,12 +102,12 @@ func main() {
 	for _, scraper := range scrapers {
 		stateAbbr := scraper.GetStateAbbreviation()
 
-		// Get state ID
-		var stateID string
-		err := conn.QueryRow(context.Background(),
-			"SELECT id FROM states WHERE abbreviation = $1",
-			stateAbbr,
-		).Scan(&stateID)
+		// Get state record
+		var stateRecord *models.Record
+		err := app.Dao().RecordQuery(statesCollection).
+			AndWhere(dbx.HashExp{"abbreviation": stateAbbr}).
+			Limit(1).
+			One(&stateRecord)
 
 		if err != nil {
 			log.Printf("Error finding state %s: %v\n", stateAbbr, err)
@@ -96,34 +123,55 @@ func main() {
 
 		// Process each bill
 		for _, bill := range bills {
-			// Set the state ID from our database
-			bill.StateID = stateID
+			// Find primary sponsor if provided
+			var sponsorRecord *models.Record
+			if bill.PrimarySponsor != "" {
+				// This is a simplified lookup - you may need to adjust based on how sponsors are named
+				err = app.Dao().RecordQuery(repsCollection).
+					AndWhere(dbx.Like("first_name", bill.PrimarySponsor)).
+					OrWhere(dbx.Like("last_name", bill.PrimarySponsor)).
+					Limit(1).
+					One(&sponsorRecord)
+				if err != nil {
+					sponsorRecord = nil
+				}
+			}
 
-			// Insert the bill
-			_, err := conn.Exec(context.Background(),
-				`INSERT INTO bills 
-				(bill_type, bill_number, title, description, status, session_year,
-				state_id, full_text_url, last_action_date, last_action_description,
-				fiscal_note_url, effective_date)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-				ON CONFLICT (bill_type, bill_number, session_year, state_id)
-				DO UPDATE SET
-					title = EXCLUDED.title,
-					description = EXCLUDED.description,
-					status = EXCLUDED.status,
-					full_text_url = EXCLUDED.full_text_url,
-					last_action_date = EXCLUDED.last_action_date,
-					last_action_description = EXCLUDED.last_action_description,
-					fiscal_note_url = EXCLUDED.fiscal_note_url,
-					effective_date = EXCLUDED.effective_date`,
-				bill.BillType, bill.BillNumber, bill.Title, bill.Description,
-				bill.Status, bill.SessionYear, bill.StateID, bill.FullTextURL,
-				bill.LastActionDate, bill.LastAction, bill.FiscalNoteURL,
-				bill.EffectiveDate,
-			)
+			// Find existing bill
+			var billRecord *models.Record
+			err = app.Dao().RecordQuery(billsCollection).
+				AndWhere(dbx.HashExp{
+					"bill_type":    bill.BillType,
+					"bill_number":  bill.BillNumber,
+					"session_year": bill.SessionYear,
+					"state":        stateRecord.Id,
+				}).
+				Limit(1).
+				One(&billRecord)
 
 			if err != nil {
-				log.Printf("Error inserting bill %s-%d: %v\n", bill.BillType, bill.BillNumber, err)
+				billRecord = models.NewRecord(billsCollection)
+			}
+
+			billRecord.Set("bill_type", bill.BillType)
+			billRecord.Set("bill_number", bill.BillNumber)
+			billRecord.Set("title", bill.Title)
+			billRecord.Set("description", bill.Description)
+			billRecord.Set("status", bill.Status)
+			billRecord.Set("session_year", bill.SessionYear)
+			billRecord.Set("state", stateRecord.Id)
+			billRecord.Set("full_text_url", bill.FullTextURL)
+			billRecord.Set("last_action_date", bill.LastActionDate)
+			billRecord.Set("last_action_description", bill.LastAction)
+			billRecord.Set("fiscal_note_url", bill.FiscalNoteURL)
+			billRecord.Set("effective_date", bill.EffectiveDate)
+
+			if sponsorRecord != nil {
+				billRecord.Set("primary_sponsor", sponsorRecord.Id)
+			}
+
+			if err := app.Dao().SaveRecord(billRecord); err != nil {
+				log.Printf("Error saving bill %s-%d: %v\n", bill.BillType, bill.BillNumber, err)
 				continue
 			}
 
@@ -131,4 +179,6 @@ func main() {
 				bill.BillType, bill.BillNumber, stateAbbr)
 		}
 	}
+
+	os.Exit(0)
 }

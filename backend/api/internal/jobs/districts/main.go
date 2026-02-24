@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,7 +9,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/models"
 )
 
 type ProPublicaMember struct {
@@ -36,9 +37,9 @@ type ProPublicaResponse struct {
 
 func main() {
 	// Get required environment variables
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		log.Fatal("DATABASE_URL environment variable is required")
+	pbDataDir := os.Getenv("PB_DATA_DIR")
+	if pbDataDir == "" {
+		pbDataDir = "./pb_data"
 	}
 
 	apiKey := os.Getenv("PROPUBLICA_API_KEY")
@@ -46,12 +47,42 @@ func main() {
 		log.Fatal("PROPUBLICA_API_KEY environment variable is required")
 	}
 
-	// Connect to database
-	conn, err := pgx.Connect(context.Background(), dbURL)
+	// Initialize PocketBase
+	app := pocketbase.New()
+
+	// Set data directory
+	app.RootCmd.PersistentFlags().String("dir", pbDataDir, "PocketBase data directory")
+
+	// Start PocketBase briefly to initialize the DAO
+	go func() {
+		if err := app.Start(); err != nil {
+			log.Fatalf("Failed to start PocketBase: %v", err)
+		}
+	}()
+
+	// Wait a moment for initialization
+	time.Sleep(1 * time.Second)
+
+	// Get collections
+	statesCollection, err := app.Dao().FindCollectionByNameOrId("states")
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v\n", err)
+		log.Fatalf("States collection not found: %v", err)
 	}
-	defer conn.Close(context.Background())
+
+	repsCollection, err := app.Dao().FindCollectionByNameOrId("representatives")
+	if err != nil {
+		log.Fatalf("Representatives collection not found: %v", err)
+	}
+
+	districtsCollection, err := app.Dao().FindCollectionByNameOrId("house_districts")
+	if err != nil {
+		log.Fatalf("House districts collection not found: %v", err)
+	}
+
+	seatsCollection, err := app.Dao().FindCollectionByNameOrId("senate_seats")
+	if err != nil {
+		log.Fatalf("Senate seats collection not found: %v", err)
+	}
 
 	// Fetch both House and Senate members
 	chambers := []string{"house", "senate"}
@@ -67,78 +98,104 @@ func main() {
 				continue
 			}
 
-			// Insert representative
-			var repID string
-			err := conn.QueryRow(context.Background(),
-				`INSERT INTO representatives 
-				(first_name, last_name, representative_type, party, phone, website, twitter_handle, term_end)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-				ON CONFLICT (first_name, last_name, representative_type) 
-				DO UPDATE SET 
-					party = EXCLUDED.party,
-					phone = EXCLUDED.phone,
-					website = EXCLUDED.website,
-					twitter_handle = EXCLUDED.twitter_handle,
-					term_end = EXCLUDED.term_end
-				RETURNING id`,
-				member.FirstName,
-				member.LastName,
-				chamber,
-				member.Party,
-				member.Phone,
-				member.Website,
-				member.TwitterAccount,
-				member.NextElection+"-01-03", // Term typically ends Jan 3rd
-			).Scan(&repID)
-
-			if err != nil {
-				log.Printf("Error inserting representative %s %s: %v\n", member.FirstName, member.LastName, err)
-				continue
-			}
-
-			// Get state ID
-			var stateID string
-			err = conn.QueryRow(context.Background(),
-				"SELECT id FROM states WHERE abbreviation = $1",
-				member.State,
-			).Scan(&stateID)
-
+			// Find state by abbreviation
+			var stateRecord *models.Record
+			err := app.Dao().RecordQuery(statesCollection).
+				AndWhere(dbx.HashExp{"abbreviation": member.State}).
+				Limit(1).
+				One(&stateRecord)
 			if err != nil {
 				log.Printf("Error finding state %s: %v\n", member.State, err)
 				continue
 			}
 
-			// Insert district or senate seat
-			if chamber == "house" {
-				_, err = conn.Exec(context.Background(),
-					`INSERT INTO house_districts (state_id, district_number, representative_id)
-					VALUES ($1, $2, $3)
-					ON CONFLICT (state_id, district_number) 
-					DO UPDATE SET representative_id = EXCLUDED.representative_id`,
-					stateID, member.District, repID,
-				)
-			} else {
-				// For senate, we need to determine the seat class based on next election year
-				nextElectionYear := member.NextElection
-				seatClass := determineSeatClass(nextElectionYear)
-
-				_, err = conn.Exec(context.Background(),
-					`INSERT INTO senate_seats (state_id, seat_class, representative_id)
-					VALUES ($1, $2, $3)
-					ON CONFLICT (state_id, seat_class) 
-					DO UPDATE SET representative_id = EXCLUDED.representative_id`,
-					stateID, seatClass, repID,
-				)
-			}
+			// Find or create representative
+			var repRecord *models.Record
+			err = app.Dao().RecordQuery(repsCollection).
+				AndWhere(dbx.HashExp{
+					"first_name":          member.FirstName,
+					"last_name":           member.LastName,
+					"representative_type": chamber,
+				}).
+				Limit(1).
+				One(&repRecord)
 
 			if err != nil {
-				log.Printf("Error inserting district/seat for %s %s: %v\n", member.FirstName, member.LastName, err)
+				// Create new representative
+				repRecord = models.NewRecord(repsCollection)
+			}
+
+			repRecord.Set("first_name", member.FirstName)
+			repRecord.Set("last_name", member.LastName)
+			repRecord.Set("representative_type", chamber)
+			repRecord.Set("party", member.Party)
+			repRecord.Set("phone", member.Phone)
+			repRecord.Set("website", member.Website)
+			repRecord.Set("twitter_handle", member.TwitterAccount)
+			repRecord.Set("term_end", member.NextElection+"-01-03")
+
+			if err := app.Dao().SaveRecord(repRecord); err != nil {
+				log.Printf("Error saving representative %s %s: %v\n", member.FirstName, member.LastName, err)
 				continue
+			}
+
+			// Insert or update district/seat
+			if chamber == "house" {
+				// Find existing district
+				var districtRecord *models.Record
+				err = app.Dao().RecordQuery(districtsCollection).
+					AndWhere(dbx.HashExp{
+						"state":           stateRecord.Id,
+						"district_number": member.District,
+					}).
+					Limit(1).
+					One(&districtRecord)
+
+				if err != nil {
+					districtRecord = models.NewRecord(districtsCollection)
+				}
+
+				districtRecord.Set("state", stateRecord.Id)
+				districtRecord.Set("district_number", member.District)
+				districtRecord.Set("representative", repRecord.Id)
+
+				if err := app.Dao().SaveRecord(districtRecord); err != nil {
+					log.Printf("Error saving district for %s %s: %v\n", member.FirstName, member.LastName, err)
+					continue
+				}
+			} else {
+				// Senate - determine seat class
+				seatClass := determineSeatClass(member.NextElection)
+
+				// Find existing seat
+				var seatRecord *models.Record
+				err = app.Dao().RecordQuery(seatsCollection).
+					AndWhere(dbx.HashExp{
+						"state":      stateRecord.Id,
+						"seat_class": seatClass,
+					}).
+					Limit(1).
+					One(&seatRecord)
+
+				if err != nil {
+					seatRecord = models.NewRecord(seatsCollection)
+				}
+
+				seatRecord.Set("state", stateRecord.Id)
+				seatRecord.Set("seat_class", seatClass)
+				seatRecord.Set("representative", repRecord.Id)
+
+				if err := app.Dao().SaveRecord(seatRecord); err != nil {
+					log.Printf("Error saving senate seat for %s %s: %v\n", member.FirstName, member.LastName, err)
+					continue
+				}
 			}
 
 			fmt.Printf("Successfully processed %s member: %s %s\n", chamber, member.FirstName, member.LastName)
 		}
 	}
+
+	os.Exit(0)
 }
 
 func fetchMembers(apiKey string, chamber string) ([]ProPublicaMember, error) {
@@ -171,21 +228,16 @@ func fetchMembers(apiKey string, chamber string) ([]ProPublicaMember, error) {
 	return response.Results, nil
 }
 
-func determineSeatClass(nextElection string) int {
-	// Senate seats are divided into three classes
-	// Class 1: 2024, 2030, etc.
-	// Class 2: 2026, 2032, etc.
-	// Class 3: 2022, 2028, etc.
+func determineSeatClass(nextElection string) string {
 	year := nextElection
 	switch year {
 	case "2024":
-		return 1
+		return "1"
 	case "2026":
-		return 2
+		return "2"
 	case "2028":
-		return 3
+		return "3"
 	default:
-		// If we can't determine, default to class 1
-		return 1
+		return "1"
 	}
 }

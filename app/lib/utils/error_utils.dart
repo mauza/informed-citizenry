@@ -1,11 +1,11 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:pocketbase/pocketbase.dart';
 
 class ErrorUtils {
   static String getErrorMessage(dynamic error) {
-    if (error is AuthException) {
-      return error.message;
-    } else if (error is PostgrestException) {
-      return 'Database error: ${error.message}';
+    if (error is ClientException) {
+      return error.response['message'] ??
+          error.originalError?.toString() ??
+          'An error occurred';
     } else {
       return error.toString();
     }
@@ -13,18 +13,26 @@ class ErrorUtils {
 
   static bool isNetworkError(dynamic error) {
     final message = error.toString().toLowerCase();
-    return message.contains('network') || 
-           message.contains('connection') ||
-           message.contains('timeout');
+    return message.contains('network') ||
+        message.contains('connection') ||
+        message.contains('timeout') ||
+        message.contains('socket');
   }
 
   static bool isAuthError(dynamic error) {
-    return error is AuthException ||
-           error.toString().toLowerCase().contains('authentication');
+    if (error is ClientException) {
+      final status = error.statusCode;
+      return status == 401 || status == 403;
+    }
+    return error.toString().toLowerCase().contains('authentication');
   }
 
   static bool isValidationError(dynamic error) {
+    if (error is ClientException) {
+      return error.statusCode == 400 ||
+          (error.response['data'] != null && error.response['data'] is Map);
+    }
     return error.toString().toLowerCase().contains('validation') ||
-           error.toString().toLowerCase().contains('invalid');
+        error.toString().toLowerCase().contains('invalid');
   }
-} 
+}
