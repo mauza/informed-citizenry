@@ -8,12 +8,15 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/models"
+	"github.com/pocketbase/pocketbase/core"
 )
 
-// This is a standalone utility to migrate data from Supabase PostgreSQL to PocketBase
-// Usage: Set SUPABASE_DB_URL and PB_DATA_DIR environment variables, then run:
-// go run backend/scripts/migrate_from_supabase.go
+// This is a standalone utility to migrate data from Supabase PostgreSQL to PocketBase.
+// It must be run from backend/scripts/ with its own go.mod.
+//
+// Usage:
+//  1. Set SUPABASE_DB_URL and PB_DATA_DIR environment variables
+//  2. cd backend/scripts && go run migrate_from_supabase.go
 
 func main() {
 	supabaseURL := os.Getenv("SUPABASE_DB_URL")
@@ -26,71 +29,54 @@ func main() {
 		pbDataDir = "./pb_data"
 	}
 
-	// Connect to Supabase PostgreSQL
 	supabaseConn, err := pgx.Connect(context.Background(), supabaseURL)
 	if err != nil {
 		log.Fatalf("Unable to connect to Supabase: %v\n", err)
 	}
 	defer supabaseConn.Close(context.Background())
 
-	// Initialize PocketBase
 	app := pocketbase.New()
 	app.RootCmd.PersistentFlags().String("dir", pbDataDir, "PocketBase data directory")
 
-	go func() {
-		if err := app.Start(); err != nil {
-			log.Fatalf("Failed to start PocketBase: %v", err)
+	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
+		fmt.Println("Starting migration from Supabase to PocketBase...")
+
+		if err := migrateStates(supabaseConn, app); err != nil {
+			log.Printf("Error migrating states: %v\n", err)
 		}
-	}()
+		if err := migrateRepresentatives(supabaseConn, app); err != nil {
+			log.Printf("Error migrating representatives: %v\n", err)
+		}
+		if err := migrateHouseDistricts(supabaseConn, app); err != nil {
+			log.Printf("Error migrating house districts: %v\n", err)
+		}
+		if err := migrateSenateSeats(supabaseConn, app); err != nil {
+			log.Printf("Error migrating senate seats: %v\n", err)
+		}
+		if err := migrateBills(supabaseConn, app); err != nil {
+			log.Printf("Error migrating bills: %v\n", err)
+		}
+		if err := migrateBillCosponsors(supabaseConn, app); err != nil {
+			log.Printf("Error migrating bill cosponsors: %v\n", err)
+		}
+		if err := migrateBillVotes(supabaseConn, app); err != nil {
+			log.Printf("Error migrating bill votes: %v\n", err)
+		}
+		if err := migrateBillCommittees(supabaseConn, app); err != nil {
+			log.Printf("Error migrating bill committees: %v\n", err)
+		}
+		if err := migrateBillCommitteeAssignments(supabaseConn, app); err != nil {
+			log.Printf("Error migrating bill committee assignments: %v\n", err)
+		}
 
-	fmt.Println("Starting migration from Supabase to PocketBase...")
+		fmt.Println("Migration completed!")
+		os.Exit(0)
+		return e.Next()
+	})
 
-	// Migrate states
-	if err := migrateStates(supabaseConn, app); err != nil {
-		log.Printf("Error migrating states: %v\n", err)
+	if err := app.Start(); err != nil {
+		log.Fatal(err)
 	}
-
-	// Migrate representatives
-	if err := migrateRepresentatives(supabaseConn, app); err != nil {
-		log.Printf("Error migrating representatives: %v\n", err)
-	}
-
-	// Migrate house districts
-	if err := migrateHouseDistricts(supabaseConn, app); err != nil {
-		log.Printf("Error migrating house districts: %v\n", err)
-	}
-
-	// Migrate senate seats
-	if err := migrateSenateSeats(supabaseConn, app); err != nil {
-		log.Printf("Error migrating senate seats: %v\n", err)
-	}
-
-	// Migrate bills
-	if err := migrateBills(supabaseConn, app); err != nil {
-		log.Printf("Error migrating bills: %v\n", err)
-	}
-
-	// Migrate bill cosponsors
-	if err := migrateBillCosponsors(supabaseConn, app); err != nil {
-		log.Printf("Error migrating bill cosponsors: %v\n", err)
-	}
-
-	// Migrate bill votes
-	if err := migrateBillVotes(supabaseConn, app); err != nil {
-		log.Printf("Error migrating bill votes: %v\n", err)
-	}
-
-	// Migrate bill committees
-	if err := migrateBillCommittees(supabaseConn, app); err != nil {
-		log.Printf("Error migrating bill committees: %v\n", err)
-	}
-
-	// Migrate bill committee assignments
-	if err := migrateBillCommitteeAssignments(supabaseConn, app); err != nil {
-		log.Printf("Error migrating bill committee assignments: %v\n", err)
-	}
-
-	fmt.Println("Migration completed!")
 }
 
 func migrateStates(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) error {
@@ -100,7 +86,7 @@ func migrateStates(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) error {
 	}
 	defer rows.Close()
 
-	statesCollection, err := app.Dao().FindCollectionByNameOrId("states")
+	statesCol, err := app.FindCollectionByNameOrId("states")
 	if err != nil {
 		return err
 	}
@@ -113,13 +99,13 @@ func migrateStates(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) error {
 			continue
 		}
 
-		record := models.NewRecord(statesCollection)
+		record := core.NewRecord(statesCol)
 		record.SetId(id)
 		record.Set("name", name)
 		record.Set("abbreviation", abbreviation)
 		record.Set("fips_code", fipsCode)
 
-		if err := app.Dao().SaveRecord(record); err != nil {
+		if err := app.Save(record); err != nil {
 			log.Printf("Error saving state %s: %v\n", name, err)
 			continue
 		}
@@ -132,14 +118,14 @@ func migrateStates(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) error {
 
 func migrateRepresentatives(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) error {
 	rows, err := supabaseConn.Query(context.Background(),
-		`SELECT id, first_name, last_name, representative_type, party, email, phone, website, 
+		`SELECT id, first_name, last_name, representative_type, party, email, phone, website,
 		twitter_handle, term_start, term_end FROM representatives`)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
-	repsCollection, err := app.Dao().FindCollectionByNameOrId("representatives")
+	repsCol, err := app.FindCollectionByNameOrId("representatives")
 	if err != nil {
 		return err
 	}
@@ -155,7 +141,7 @@ func migrateRepresentatives(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) 
 			continue
 		}
 
-		record := models.NewRecord(repsCollection)
+		record := core.NewRecord(repsCol)
 		record.SetId(id)
 		record.Set("first_name", firstName)
 		record.Set("last_name", lastName)
@@ -182,7 +168,7 @@ func migrateRepresentatives(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) 
 			record.Set("term_end", *termEnd)
 		}
 
-		if err := app.Dao().SaveRecord(record); err != nil {
+		if err := app.Save(record); err != nil {
 			log.Printf("Error saving representative %s %s: %v\n", firstName, lastName, err)
 			continue
 		}
@@ -201,7 +187,7 @@ func migrateHouseDistricts(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) e
 	}
 	defer rows.Close()
 
-	districtsCollection, err := app.Dao().FindCollectionByNameOrId("house_districts")
+	districtsCol, err := app.FindCollectionByNameOrId("house_districts")
 	if err != nil {
 		return err
 	}
@@ -219,7 +205,7 @@ func migrateHouseDistricts(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) e
 			continue
 		}
 
-		record := models.NewRecord(districtsCollection)
+		record := core.NewRecord(districtsCol)
 		record.SetId(id)
 		record.Set("state", stateID)
 		record.Set("district_number", districtNumber)
@@ -233,7 +219,7 @@ func migrateHouseDistricts(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) e
 			record.Set("population", *population)
 		}
 
-		if err := app.Dao().SaveRecord(record); err != nil {
+		if err := app.Save(record); err != nil {
 			log.Printf("Error saving house district: %v\n", err)
 			continue
 		}
@@ -252,7 +238,7 @@ func migrateSenateSeats(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) erro
 	}
 	defer rows.Close()
 
-	seatsCollection, err := app.Dao().FindCollectionByNameOrId("senate_seats")
+	seatsCol, err := app.FindCollectionByNameOrId("senate_seats")
 	if err != nil {
 		return err
 	}
@@ -268,7 +254,7 @@ func migrateSenateSeats(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) erro
 			continue
 		}
 
-		record := models.NewRecord(seatsCollection)
+		record := core.NewRecord(seatsCol)
 		record.SetId(id)
 		record.Set("state", stateID)
 		record.Set("seat_class", seatClass)
@@ -276,7 +262,7 @@ func migrateSenateSeats(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) erro
 			record.Set("representative", *repID)
 		}
 
-		if err := app.Dao().SaveRecord(record); err != nil {
+		if err := app.Save(record); err != nil {
 			log.Printf("Error saving senate seat: %v\n", err)
 			continue
 		}
@@ -289,7 +275,7 @@ func migrateSenateSeats(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) erro
 
 func migrateBills(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) error {
 	rows, err := supabaseConn.Query(context.Background(),
-		`SELECT id, bill_type, bill_number, title, description, status, session_year, 
+		`SELECT id, bill_type, bill_number, title, description, status, session_year,
 		state_id, primary_sponsor_id, full_text_url, last_action_date, last_action_description,
 		fiscal_note_url, effective_date FROM bills`)
 	if err != nil {
@@ -297,7 +283,7 @@ func migrateBills(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) error {
 	}
 	defer rows.Close()
 
-	billsCollection, err := app.Dao().FindCollectionByNameOrId("bills")
+	billsCol, err := app.FindCollectionByNameOrId("bills")
 	if err != nil {
 		return err
 	}
@@ -317,7 +303,7 @@ func migrateBills(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) error {
 			continue
 		}
 
-		record := models.NewRecord(billsCollection)
+		record := core.NewRecord(billsCol)
 		record.SetId(id)
 		record.Set("bill_type", billType)
 		record.Set("bill_number", billNumber)
@@ -347,7 +333,7 @@ func migrateBills(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) error {
 			record.Set("effective_date", *effectiveDate)
 		}
 
-		if err := app.Dao().SaveRecord(record); err != nil {
+		if err := app.Save(record); err != nil {
 			log.Printf("Error saving bill: %v\n", err)
 			continue
 		}
@@ -366,7 +352,7 @@ func migrateBillCosponsors(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) e
 	}
 	defer rows.Close()
 
-	cosponsorsCollection, err := app.Dao().FindCollectionByNameOrId("bill_cosponsors")
+	cosponsorsCol, err := app.FindCollectionByNameOrId("bill_cosponsors")
 	if err != nil {
 		return err
 	}
@@ -380,11 +366,11 @@ func migrateBillCosponsors(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) e
 			continue
 		}
 
-		record := models.NewRecord(cosponsorsCollection)
+		record := core.NewRecord(cosponsorsCol)
 		record.Set("bill", billID)
 		record.Set("representative", repID)
 
-		if err := app.Dao().SaveRecord(record); err != nil {
+		if err := app.Save(record); err != nil {
 			log.Printf("Error saving bill cosponsor: %v\n", err)
 			continue
 		}
@@ -403,7 +389,7 @@ func migrateBillVotes(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) error 
 	}
 	defer rows.Close()
 
-	votesCollection, err := app.Dao().FindCollectionByNameOrId("bill_votes")
+	votesCol, err := app.FindCollectionByNameOrId("bill_votes")
 	if err != nil {
 		return err
 	}
@@ -418,7 +404,7 @@ func migrateBillVotes(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) error 
 			continue
 		}
 
-		record := models.NewRecord(votesCollection)
+		record := core.NewRecord(votesCol)
 		record.SetId(id)
 		record.Set("bill", billID)
 		record.Set("representative", repID)
@@ -428,7 +414,7 @@ func migrateBillVotes(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) error 
 			record.Set("reading_number", *readingNumber)
 		}
 
-		if err := app.Dao().SaveRecord(record); err != nil {
+		if err := app.Save(record); err != nil {
 			log.Printf("Error saving bill vote: %v\n", err)
 			continue
 		}
@@ -447,7 +433,7 @@ func migrateBillCommittees(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) e
 	}
 	defer rows.Close()
 
-	committeesCollection, err := app.Dao().FindCollectionByNameOrId("bill_committees")
+	committeesCol, err := app.FindCollectionByNameOrId("bill_committees")
 	if err != nil {
 		return err
 	}
@@ -461,12 +447,12 @@ func migrateBillCommittees(supabaseConn *pgx.Conn, app *pocketbase.PocketBase) e
 			continue
 		}
 
-		record := models.NewRecord(committeesCollection)
+		record := core.NewRecord(committeesCol)
 		record.SetId(id)
 		record.Set("name", name)
 		record.Set("state", stateID)
 
-		if err := app.Dao().SaveRecord(record); err != nil {
+		if err := app.Save(record); err != nil {
 			log.Printf("Error saving bill committee: %v\n", err)
 			continue
 		}
@@ -485,7 +471,7 @@ func migrateBillCommitteeAssignments(supabaseConn *pgx.Conn, app *pocketbase.Poc
 	}
 	defer rows.Close()
 
-	assignmentsCollection, err := app.Dao().FindCollectionByNameOrId("bill_committee_assignments")
+	assignmentsCol, err := app.FindCollectionByNameOrId("bill_committee_assignments")
 	if err != nil {
 		return err
 	}
@@ -500,7 +486,7 @@ func migrateBillCommitteeAssignments(supabaseConn *pgx.Conn, app *pocketbase.Poc
 			continue
 		}
 
-		record := models.NewRecord(assignmentsCollection)
+		record := core.NewRecord(assignmentsCol)
 		record.Set("bill", billID)
 		record.Set("committee", committeeID)
 		record.Set("assignment_date", assignmentDate)
@@ -508,7 +494,7 @@ func migrateBillCommitteeAssignments(supabaseConn *pgx.Conn, app *pocketbase.Poc
 			record.Set("status", *status)
 		}
 
-		if err := app.Dao().SaveRecord(record); err != nil {
+		if err := app.Save(record); err != nil {
 			log.Printf("Error saving committee assignment: %v\n", err)
 			continue
 		}

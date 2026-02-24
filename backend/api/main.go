@@ -13,7 +13,7 @@ import (
 func main() {
 	app := pocketbase.New()
 
-	app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
+	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
 		// Setup collections on first run
 		if err := collections.SetupCollections(app); err != nil {
 			return err
@@ -27,7 +27,7 @@ func main() {
 		// Custom API routes can be registered here
 		// e.Router.GET("/api/custom", customHandler)
 
-		return nil
+		return e.Next()
 	})
 
 	// Start PocketBase with default settings

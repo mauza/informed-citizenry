@@ -2,7 +2,7 @@ package migrations
 
 import (
 	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/models"
+	"github.com/pocketbase/pocketbase/core"
 )
 
 var usStates = []struct {
@@ -63,28 +63,24 @@ var usStates = []struct {
 }
 
 func SeedStates(app *pocketbase.PocketBase) error {
-	// Check if states collection exists and has records
-	statesCollection, err := app.Dao().FindCollectionByNameOrId("states")
+	statesCol, err := app.FindCollectionByNameOrId("states")
 	if err != nil {
 		// Collection doesn't exist yet, will be created by setup
 		return nil
 	}
 
-	// Check if states already exist
-	existing, err := app.Dao().FindRecordsByExpr(statesCollection.Name)
+	existing, err := app.FindAllRecords("states")
 	if err == nil && len(existing) > 0 {
-		// States already seeded
 		return nil
 	}
 
-	// Seed all states
 	for _, state := range usStates {
-		record := models.NewRecord(statesCollection)
+		record := core.NewRecord(statesCol)
 		record.Set("name", state.Name)
 		record.Set("abbreviation", state.Abbreviation)
 		record.Set("fips_code", state.FipsCode)
 
-		if err := app.Dao().SaveRecord(record); err != nil {
+		if err := app.Save(record); err != nil {
 			return err
 		}
 	}

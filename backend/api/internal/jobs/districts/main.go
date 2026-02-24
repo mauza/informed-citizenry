@@ -11,7 +11,7 @@ import (
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/models"
+	"github.com/pocketbase/pocketbase/core"
 )
 
 type ProPublicaMember struct {
@@ -36,7 +36,6 @@ type ProPublicaResponse struct {
 }
 
 func main() {
-	// Get required environment variables
 	pbDataDir := os.Getenv("PB_DATA_DIR")
 	if pbDataDir == "" {
 		pbDataDir = "./pb_data"
@@ -47,44 +46,23 @@ func main() {
 		log.Fatal("PROPUBLICA_API_KEY environment variable is required")
 	}
 
-	// Initialize PocketBase
 	app := pocketbase.New()
-
-	// Set data directory
 	app.RootCmd.PersistentFlags().String("dir", pbDataDir, "PocketBase data directory")
 
-	// Start PocketBase briefly to initialize the DAO
-	go func() {
-		if err := app.Start(); err != nil {
-			log.Fatalf("Failed to start PocketBase: %v", err)
+	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
+		if err := runJob(app, apiKey); err != nil {
+			log.Printf("Job error: %v\n", err)
 		}
-	}()
+		os.Exit(0)
+		return e.Next()
+	})
 
-	// Wait a moment for initialization
-	time.Sleep(1 * time.Second)
-
-	// Get collections
-	statesCollection, err := app.Dao().FindCollectionByNameOrId("states")
-	if err != nil {
-		log.Fatalf("States collection not found: %v", err)
+	if err := app.Start(); err != nil {
+		log.Fatal(err)
 	}
+}
 
-	repsCollection, err := app.Dao().FindCollectionByNameOrId("representatives")
-	if err != nil {
-		log.Fatalf("Representatives collection not found: %v", err)
-	}
-
-	districtsCollection, err := app.Dao().FindCollectionByNameOrId("house_districts")
-	if err != nil {
-		log.Fatalf("House districts collection not found: %v", err)
-	}
-
-	seatsCollection, err := app.Dao().FindCollectionByNameOrId("senate_seats")
-	if err != nil {
-		log.Fatalf("Senate seats collection not found: %v", err)
-	}
-
-	// Fetch both House and Senate members
+func runJob(app *pocketbase.PocketBase, apiKey string) error {
 	chambers := []string{"house", "senate"}
 	for _, chamber := range chambers {
 		members, err := fetchMembers(apiKey, chamber)
@@ -98,31 +76,29 @@ func main() {
 				continue
 			}
 
-			// Find state by abbreviation
-			var stateRecord *models.Record
-			err := app.Dao().RecordQuery(statesCollection).
-				AndWhere(dbx.HashExp{"abbreviation": member.State}).
-				Limit(1).
-				One(&stateRecord)
+			stateRecord, err := app.FindFirstRecordByFilter("states", "abbreviation = {:abbr}", dbx.Params{"abbr": member.State})
 			if err != nil {
 				log.Printf("Error finding state %s: %v\n", member.State, err)
 				continue
 			}
 
-			// Find or create representative
-			var repRecord *models.Record
-			err = app.Dao().RecordQuery(repsCollection).
-				AndWhere(dbx.HashExp{
-					"first_name":          member.FirstName,
-					"last_name":           member.LastName,
-					"representative_type": chamber,
-				}).
-				Limit(1).
-				One(&repRecord)
+			repRecords, err := app.FindRecordsByFilter(
+				"representatives",
+				"first_name = {:fn} && last_name = {:ln} && representative_type = {:type}",
+				"", 1, 0,
+				dbx.Params{"fn": member.FirstName, "ln": member.LastName, "type": chamber},
+			)
 
-			if err != nil {
-				// Create new representative
-				repRecord = models.NewRecord(repsCollection)
+			var repRecord *core.Record
+			if err != nil || len(repRecords) == 0 {
+				repsCol, err := app.FindCollectionByNameOrId("representatives")
+				if err != nil {
+					log.Printf("Error finding representatives collection: %v\n", err)
+					continue
+				}
+				repRecord = core.NewRecord(repsCol)
+			} else {
+				repRecord = repRecords[0]
 			}
 
 			repRecord.Set("first_name", member.FirstName)
@@ -134,58 +110,65 @@ func main() {
 			repRecord.Set("twitter_handle", member.TwitterAccount)
 			repRecord.Set("term_end", member.NextElection+"-01-03")
 
-			if err := app.Dao().SaveRecord(repRecord); err != nil {
+			if err := app.Save(repRecord); err != nil {
 				log.Printf("Error saving representative %s %s: %v\n", member.FirstName, member.LastName, err)
 				continue
 			}
 
-			// Insert or update district/seat
 			if chamber == "house" {
-				// Find existing district
-				var districtRecord *models.Record
-				err = app.Dao().RecordQuery(districtsCollection).
-					AndWhere(dbx.HashExp{
-						"state":           stateRecord.Id,
-						"district_number": member.District,
-					}).
-					Limit(1).
-					One(&districtRecord)
+				districtRecords, err := app.FindRecordsByFilter(
+					"house_districts",
+					"state = {:state} && district_number = {:num}",
+					"", 1, 0,
+					dbx.Params{"state": stateRecord.Id, "num": member.District},
+				)
 
-				if err != nil {
-					districtRecord = models.NewRecord(districtsCollection)
+				var districtRecord *core.Record
+				if err != nil || len(districtRecords) == 0 {
+					districtsCol, err := app.FindCollectionByNameOrId("house_districts")
+					if err != nil {
+						log.Printf("Error finding house_districts collection: %v\n", err)
+						continue
+					}
+					districtRecord = core.NewRecord(districtsCol)
+				} else {
+					districtRecord = districtRecords[0]
 				}
 
 				districtRecord.Set("state", stateRecord.Id)
 				districtRecord.Set("district_number", member.District)
 				districtRecord.Set("representative", repRecord.Id)
 
-				if err := app.Dao().SaveRecord(districtRecord); err != nil {
+				if err := app.Save(districtRecord); err != nil {
 					log.Printf("Error saving district for %s %s: %v\n", member.FirstName, member.LastName, err)
 					continue
 				}
 			} else {
-				// Senate - determine seat class
 				seatClass := determineSeatClass(member.NextElection)
+				seatRecords, err := app.FindRecordsByFilter(
+					"senate_seats",
+					"state = {:state} && seat_class = {:class}",
+					"", 1, 0,
+					dbx.Params{"state": stateRecord.Id, "class": seatClass},
+				)
 
-				// Find existing seat
-				var seatRecord *models.Record
-				err = app.Dao().RecordQuery(seatsCollection).
-					AndWhere(dbx.HashExp{
-						"state":      stateRecord.Id,
-						"seat_class": seatClass,
-					}).
-					Limit(1).
-					One(&seatRecord)
-
-				if err != nil {
-					seatRecord = models.NewRecord(seatsCollection)
+				var seatRecord *core.Record
+				if err != nil || len(seatRecords) == 0 {
+					seatsCol, err := app.FindCollectionByNameOrId("senate_seats")
+					if err != nil {
+						log.Printf("Error finding senate_seats collection: %v\n", err)
+						continue
+					}
+					seatRecord = core.NewRecord(seatsCol)
+				} else {
+					seatRecord = seatRecords[0]
 				}
 
 				seatRecord.Set("state", stateRecord.Id)
 				seatRecord.Set("seat_class", seatClass)
 				seatRecord.Set("representative", repRecord.Id)
 
-				if err := app.Dao().SaveRecord(seatRecord); err != nil {
+				if err := app.Save(seatRecord); err != nil {
 					log.Printf("Error saving senate seat for %s %s: %v\n", member.FirstName, member.LastName, err)
 					continue
 				}
@@ -194,8 +177,7 @@ func main() {
 			fmt.Printf("Successfully processed %s member: %s %s\n", chamber, member.FirstName, member.LastName)
 		}
 	}
-
-	os.Exit(0)
+	return nil
 }
 
 func fetchMembers(apiKey string, chamber string) ([]ProPublicaMember, error) {
@@ -229,8 +211,7 @@ func fetchMembers(apiKey string, chamber string) ([]ProPublicaMember, error) {
 }
 
 func determineSeatClass(nextElection string) string {
-	year := nextElection
-	switch year {
+	switch nextElection {
 	case "2024":
 		return "1"
 	case "2026":

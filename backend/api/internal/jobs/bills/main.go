@@ -9,7 +9,7 @@ import (
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/models"
+	"github.com/pocketbase/pocketbase/core"
 )
 
 // BillInfo represents the common bill information across different states
@@ -52,45 +52,28 @@ func (w *WashingtonScraper) FetchBills(ctx context.Context) ([]BillInfo, error) 
 }
 
 func main() {
-	// Get PocketBase data directory
 	pbDataDir := os.Getenv("PB_DATA_DIR")
 	if pbDataDir == "" {
 		pbDataDir = "./pb_data"
 	}
 
-	// Initialize PocketBase
 	app := pocketbase.New()
-
-	// Set data directory
 	app.RootCmd.PersistentFlags().String("dir", pbDataDir, "PocketBase data directory")
 
-	// Start PocketBase briefly to initialize the DAO
-	go func() {
-		if err := app.Start(); err != nil {
-			log.Fatalf("Failed to start PocketBase: %v", err)
+	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
+		if err := runJob(app); err != nil {
+			log.Printf("Job error: %v\n", err)
 		}
-	}()
+		os.Exit(0)
+		return e.Next()
+	})
 
-	// Wait a moment for initialization
-	time.Sleep(1 * time.Second)
-
-	// Get collections
-	statesCollection, err := app.Dao().FindCollectionByNameOrId("states")
-	if err != nil {
-		log.Fatalf("States collection not found: %v", err)
+	if err := app.Start(); err != nil {
+		log.Fatal(err)
 	}
+}
 
-	billsCollection, err := app.Dao().FindCollectionByNameOrId("bills")
-	if err != nil {
-		log.Fatalf("Bills collection not found: %v", err)
-	}
-
-	repsCollection, err := app.Dao().FindCollectionByNameOrId("representatives")
-	if err != nil {
-		log.Fatalf("Representatives collection not found: %v", err)
-	}
-
-	// Create a slice of scrapers for different states
+func runJob(app *pocketbase.PocketBase) error {
 	scrapers := []StateLegislatureScraper{
 		&WashingtonScraper{
 			apiKey: os.Getenv("WA_LEGISLATURE_API_KEY"),
@@ -98,59 +81,57 @@ func main() {
 		// Add more state scrapers here
 	}
 
-	// Process each state
 	for _, scraper := range scrapers {
 		stateAbbr := scraper.GetStateAbbreviation()
 
-		// Get state record
-		var stateRecord *models.Record
-		err := app.Dao().RecordQuery(statesCollection).
-			AndWhere(dbx.HashExp{"abbreviation": stateAbbr}).
-			Limit(1).
-			One(&stateRecord)
-
+		stateRecord, err := app.FindFirstRecordByFilter("states", "abbreviation = {:abbr}", dbx.Params{"abbr": stateAbbr})
 		if err != nil {
 			log.Printf("Error finding state %s: %v\n", stateAbbr, err)
 			continue
 		}
 
-		// Fetch bills for the state
 		bills, err := scraper.FetchBills(context.Background())
 		if err != nil {
 			log.Printf("Error fetching bills for state %s: %v\n", stateAbbr, err)
 			continue
 		}
 
-		// Process each bill
 		for _, bill := range bills {
-			// Find primary sponsor if provided
-			var sponsorRecord *models.Record
+			var sponsorRecord *core.Record
 			if bill.PrimarySponsor != "" {
-				// This is a simplified lookup - you may need to adjust based on how sponsors are named
-				err = app.Dao().RecordQuery(repsCollection).
-					AndWhere(dbx.Like("first_name", bill.PrimarySponsor)).
-					OrWhere(dbx.Like("last_name", bill.PrimarySponsor)).
-					Limit(1).
-					One(&sponsorRecord)
-				if err != nil {
-					sponsorRecord = nil
+				sponsorRecords, err := app.FindRecordsByFilter(
+					"representatives",
+					"first_name ~ {:name} || last_name ~ {:name}",
+					"", 1, 0,
+					dbx.Params{"name": bill.PrimarySponsor},
+				)
+				if err == nil && len(sponsorRecords) > 0 {
+					sponsorRecord = sponsorRecords[0]
 				}
 			}
 
-			// Find existing bill
-			var billRecord *models.Record
-			err = app.Dao().RecordQuery(billsCollection).
-				AndWhere(dbx.HashExp{
-					"bill_type":    bill.BillType,
-					"bill_number":  bill.BillNumber,
-					"session_year": bill.SessionYear,
-					"state":        stateRecord.Id,
-				}).
-				Limit(1).
-				One(&billRecord)
+			billRecords, err := app.FindRecordsByFilter(
+				"bills",
+				"bill_type = {:type} && bill_number = {:num} && session_year = {:year} && state = {:state}",
+				"", 1, 0,
+				dbx.Params{
+					"type":  bill.BillType,
+					"num":   bill.BillNumber,
+					"year":  bill.SessionYear,
+					"state": stateRecord.Id,
+				},
+			)
 
-			if err != nil {
-				billRecord = models.NewRecord(billsCollection)
+			var billRecord *core.Record
+			if err != nil || len(billRecords) == 0 {
+				billsCol, err := app.FindCollectionByNameOrId("bills")
+				if err != nil {
+					log.Printf("Error finding bills collection: %v\n", err)
+					continue
+				}
+				billRecord = core.NewRecord(billsCol)
+			} else {
+				billRecord = billRecords[0]
 			}
 
 			billRecord.Set("bill_type", bill.BillType)
@@ -170,7 +151,7 @@ func main() {
 				billRecord.Set("primary_sponsor", sponsorRecord.Id)
 			}
 
-			if err := app.Dao().SaveRecord(billRecord); err != nil {
+			if err := app.Save(billRecord); err != nil {
 				log.Printf("Error saving bill %s-%d: %v\n", bill.BillType, bill.BillNumber, err)
 				continue
 			}
@@ -179,6 +160,5 @@ func main() {
 				bill.BillType, bill.BillNumber, stateAbbr)
 		}
 	}
-
-	os.Exit(0)
+	return nil
 }
