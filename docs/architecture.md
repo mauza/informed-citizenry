@@ -31,6 +31,7 @@ src/
 │   │   │   └── update-scores/      # Update representation scores
 │   │   └── stripe/         # Stripe checkout & webhooks
 │   └── (main)/             # Main app pages (authenticated)
+│       ├── dashboard/      # Authenticated user dashboard
 │       ├── bills/          # Bill listings & details
 │       ├── legislators/    # Legislator listings & profiles
 │       ├── my-votes/       # User's recorded sentiments

@@ -130,8 +130,7 @@ tests/
 │   └── auth.ts                    # Authentication helpers
 ├── .auth/
 │   └── user.json                  # Stored auth state (generated)
-├── global-setup.ts                # Global test setup
-└── Dockerfile.e2e                 # Docker config for E2E
+└── global-setup.ts                # Global test setup
 ```
 
 ### Authentication in E2E Tests
