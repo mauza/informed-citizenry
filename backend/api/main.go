@@ -4,14 +4,10 @@ import (
 	"context"
 	"log/slog"
 	"net"
-	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	pocketbaseSDK "github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/types"
 	"google.golang.org/grpc"
@@ -29,30 +25,24 @@ func main() {
 	// ---------------------------------------------------------------------------
 	// Initialize PocketBase
 	// ---------------------------------------------------------------------------
-	app := pocketbaseSDK.New()
-
-	// Set data directory from env or default
 	dataDir := os.Getenv("POCKETBASE_DATA_DIR")
 	if dataDir == "" {
 		dataDir = "./pb_data"
 	}
-	app.RootCmd.SetArgs([]string{"serve", "--dir", dataDir})
+
+	app := pocketbaseSDK.NewWithConfig(pocketbaseSDK.Config{
+		DefaultDataDir: dataDir,
+	})
 
 	// ---------------------------------------------------------------------------
-	// Setup collections on before serve
+	// Setup collections and start gRPC server on serve
 	// ---------------------------------------------------------------------------
-	app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
+	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
 		if err := setupCollections(app); err != nil {
 			logger.Error("failed to setup collections", "error", err)
 			return err
 		}
-		return nil
-	})
 
-	// ---------------------------------------------------------------------------
-	// Start gRPC server after PocketBase is ready
-	// ---------------------------------------------------------------------------
-	app.OnAfterBootstrap().Add(func(e *core.BootstrapEvent) error {
 		// Create repositories using PocketBase
 		billRepo := pocketbase.NewBillRepository(app)
 		legislatorRepo := pocketbase.NewLegislatorRepository(app)
@@ -100,28 +90,17 @@ func main() {
 		}
 
 		// Mount gRPC-Gateway on PocketBase router
-		e.Router.Any("/api/v1/*", apis.ActivityLogger(app), func(c *core.RequestEvent) error {
+		e.Router.Any("/api/v1/{path...}", func(c *core.RequestEvent) error {
 			gwmux.ServeHTTP(c.Response, c.Request)
 			return nil
 		})
 
 		logger.Info("serving gRPC-Gateway", "addr", "/api/v1")
-		return nil
+		return e.Next()
 	})
 
 	// ---------------------------------------------------------------------------
-	// Handle graceful shutdown
-	// ---------------------------------------------------------------------------
-	go func() {
-		sigCh := make(chan os.Signal, 1)
-		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-		<-sigCh
-		logger.Info("shutting down gracefully...")
-		app.CancelBootstrap()
-	}()
-
-	// ---------------------------------------------------------------------------
-	// Start PocketBase
+	// Start PocketBase (handles graceful shutdown internally)
 	// ---------------------------------------------------------------------------
 	logger.Info("starting PocketBase")
 	if err := app.Start(); err != nil {
@@ -130,149 +109,70 @@ func main() {
 	}
 }
 
-// setupCollections creates the legislators and bills collections if they don't exist
+// setupCollections creates the legislators and bills collections if they don't exist,
+// or updates their schema if they do. This is idempotent.
 func setupCollections(app core.App) error {
-	// Create legislators collection
+	// Create or update legislators collection
 	legislators, err := app.FindCollectionByNameOrId("legislators")
 	if err != nil {
-		// Collection doesn't exist, create it
 		legislators = core.NewBaseCollection("legislators")
 	}
 
-	// Define schema fields
-	legislators.Fields = core.FieldList{
-		&core.TextField{
-			Name:     "chamber",
-			Required: true,
-			Options:  &core.TextOptions{Max: 10},
-		},
-		&core.NumberField{
-			Name:     "district_number",
-			Required: true,
-		},
-		&core.TextField{
-			Name:     "first_name",
-			Required: true,
-			Options:  &core.TextOptions{Max: 100},
-		},
-		&core.TextField{
-			Name:     "last_name",
-			Required: true,
-			Options:  &core.TextOptions{Max: 100},
-		},
-		&core.TextField{
-			Name:    "party",
-			Options: &core.TextOptions{Max: 50},
-		},
-		&core.EmailField{
-			Name: "email",
-		},
-		&core.TextField{
-			Name:    "phone",
-			Options: &core.TextOptions{Max: 20},
-		},
-		&core.URLField{
-			Name: "website",
-		},
-		&core.URLField{
-			Name: "image_url",
-		},
-		&core.TextField{
-			Name:    "utah_legislature_id",
-			Options: &core.TextOptions{Max: 50},
-		},
-		&core.NumberField{
-			Name: "legiscan_id",
-		},
-		&core.TextField{
-			Name:    "openstates_id",
-			Options: &core.TextOptions{Max: 50},
-		},
-	}
+	legislators.Fields = core.NewFieldsList(
+		&core.TextField{Name: "chamber", Required: true, Max: 10},
+		&core.NumberField{Name: "district_number", Required: true},
+		&core.TextField{Name: "first_name", Required: true, Max: 100},
+		&core.TextField{Name: "last_name", Required: true, Max: 100},
+		&core.TextField{Name: "party", Max: 50},
+		&core.EmailField{Name: "email"},
+		&core.TextField{Name: "phone", Max: 20},
+		&core.URLField{Name: "website"},
+		&core.URLField{Name: "image_url"},
+		&core.TextField{Name: "utah_legislature_id", Max: 50},
+		&core.NumberField{Name: "legiscan_id"},
+		&core.TextField{Name: "openstates_id", Max: 50},
+	)
 
-	// Set access rules - authenticated admin only for write operations
-	// Public can read, but only authenticated admins can modify
-	legislators.ListRule = types.Ptr("")
-	legislators.ViewRule = types.Ptr("")
-	legislators.CreateRule = types.Ptr("@request.auth.id != '' && @request.auth.isAdmin = true")
-	legislators.UpdateRule = types.Ptr("@request.auth.id != '' && @request.auth.isAdmin = true")
-	legislators.DeleteRule = types.Ptr("@request.auth.id != '' && @request.auth.isAdmin = true")
+	// Public read, authenticated admin write
+	legislators.ListRule = types.Pointer("")
+	legislators.ViewRule = types.Pointer("")
+	legislators.CreateRule = types.Pointer("@request.auth.id != '' && @request.auth.isAdmin = true")
+	legislators.UpdateRule = types.Pointer("@request.auth.id != '' && @request.auth.isAdmin = true")
+	legislators.DeleteRule = types.Pointer("@request.auth.id != '' && @request.auth.isAdmin = true")
 
 	if err := app.Save(legislators); err != nil {
 		return err
 	}
 
-	// Create bills collection
+	// Create or update bills collection
 	bills, err := app.FindCollectionByNameOrId("bills")
 	if err != nil {
 		bills = core.NewBaseCollection("bills")
 	}
 
-	bills.Fields = core.FieldList{
-		&core.TextField{
-			Name:     "bill_number",
-			Required: true,
-			Options:  &core.TextOptions{Max: 20},
-		},
-		&core.TextField{
-			Name:     "bill_type",
-			Required: true,
-			Options:  &core.TextOptions{Max: 10},
-		},
-		&core.NumberField{
-			Name:     "session_year",
-			Required: true,
-		},
-		&core.TextField{
-			Name:     "title",
-			Required: true,
-			Options:  &core.TextOptions{Max: 500},
-		},
-		&core.TextField{
-			Name:    "description",
-			Options: &core.TextOptions{Max: 10000},
-		},
-		&core.TextField{
-			Name:     "status",
-			Required: true,
-			Options:  &core.TextOptions{Max: 50},
-		},
-		&core.RelationField{
-			Name:         "sponsor",
-			CollectionId: legislators.Id,
-		},
-		&core.URLField{
-			Name: "full_text_url",
-		},
-		&core.TextField{
-			Name:    "last_action",
-			Options: &core.TextOptions{Max: 500},
-		},
-		&core.DateField{
-			Name: "last_action_date",
-		},
-		&core.URLField{
-			Name: "fiscal_note_url",
-		},
-		&core.DateField{
-			Name: "effective_date",
-		},
-		&core.TextField{
-			Name:    "utah_legislature_id",
-			Options: &core.TextOptions{Max: 50},
-		},
-		&core.NumberField{
-			Name: "legiscan_id",
-		},
-	}
+	bills.Fields = core.NewFieldsList(
+		&core.TextField{Name: "bill_number", Required: true, Max: 20},
+		&core.TextField{Name: "bill_type", Required: true, Max: 10},
+		&core.NumberField{Name: "session_year", Required: true},
+		&core.TextField{Name: "title", Required: true, Max: 500},
+		&core.TextField{Name: "description", Max: 10000},
+		&core.TextField{Name: "status", Required: true, Max: 50},
+		&core.RelationField{Name: "sponsor", CollectionId: legislators.Id},
+		&core.URLField{Name: "full_text_url"},
+		&core.TextField{Name: "last_action", Max: 500},
+		&core.DateField{Name: "last_action_date"},
+		&core.URLField{Name: "fiscal_note_url"},
+		&core.DateField{Name: "effective_date"},
+		&core.TextField{Name: "utah_legislature_id", Max: 50},
+		&core.NumberField{Name: "legiscan_id"},
+	)
 
-	// Set access rules - authenticated admin only for write operations
-	// Public can read, but only authenticated admins can modify
-	bills.ListRule = types.Ptr("")
-	bills.ViewRule = types.Ptr("")
-	bills.CreateRule = types.Ptr("@request.auth.id != '' && @request.auth.isAdmin = true")
-	bills.UpdateRule = types.Ptr("@request.auth.id != '' && @request.auth.isAdmin = true")
-	bills.DeleteRule = types.Ptr("@request.auth.id != '' && @request.auth.isAdmin = true")
+	// Public read, authenticated admin write
+	bills.ListRule = types.Pointer("")
+	bills.ViewRule = types.Pointer("")
+	bills.CreateRule = types.Pointer("@request.auth.id != '' && @request.auth.isAdmin = true")
+	bills.UpdateRule = types.Pointer("@request.auth.id != '' && @request.auth.isAdmin = true")
+	bills.DeleteRule = types.Pointer("@request.auth.id != '' && @request.auth.isAdmin = true")
 
 	return app.Save(bills)
 }

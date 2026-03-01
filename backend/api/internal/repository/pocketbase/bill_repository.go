@@ -3,9 +3,9 @@ package pocketbase
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/pocketbase/pocketbase/core"
 
@@ -61,8 +61,8 @@ func (r *BillRepository) ListBills(ctx context.Context, f repository.BillFilters
 		billCollection,
 		filter,
 		"-session_year, bill_number",
-		page,
 		pageSize,
+		(page-1)*pageSize,
 		params,
 	)
 	if err != nil {
@@ -84,7 +84,7 @@ func (r *BillRepository) ListBills(ctx context.Context, f repository.BillFilters
 func (r *BillRepository) GetBill(ctx context.Context, id string) (*domain.Bill, error) {
 	rec, err := r.app.FindRecordById(billCollection, id)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("get bill: %w", err)
@@ -131,11 +131,11 @@ func (r *BillRepository) UpsertBill(ctx context.Context, b domain.Bill) error {
 	rec.Set("full_text_url", b.FullTextURL)
 	rec.Set("last_action", b.LastAction)
 	if b.LastActionDate != nil {
-		rec.Set("last_action_date", b.LastActionDate.Format(time.RFC3339))
+		rec.Set("last_action_date", *b.LastActionDate)
 	}
 	rec.Set("fiscal_note_url", b.FiscalNoteURL)
 	if b.EffectiveDate != nil {
-		rec.Set("effective_date", b.EffectiveDate.Format(time.RFC3339))
+		rec.Set("effective_date", *b.EffectiveDate)
 	}
 	rec.Set("utah_legislature_id", b.UtahLegislatureID)
 	rec.Set("legiscan_id", b.LegiscanID)
@@ -163,16 +163,14 @@ func (r *BillRepository) recordToBill(rec *core.Record) (*domain.Bill, error) {
 		LegiscanID:        rec.GetInt("legiscan_id"),
 	}
 
-	// Handle date fields
-	if lastActionDateStr := rec.GetString("last_action_date"); lastActionDateStr != "" {
-		if t, err := time.Parse(time.RFC3339, lastActionDateStr); err == nil {
-			bill.LastActionDate = &t
-		}
+	// Handle date fields using PocketBase's typed DateTime getter
+	if d := rec.GetDateTime("last_action_date"); !d.IsZero() {
+		t := d.Time()
+		bill.LastActionDate = &t
 	}
-	if effectiveDateStr := rec.GetString("effective_date"); effectiveDateStr != "" {
-		if t, err := time.Parse(time.RFC3339, effectiveDateStr); err == nil {
-			bill.EffectiveDate = &t
-		}
+	if d := rec.GetDateTime("effective_date"); !d.IsZero() {
+		t := d.Time()
+		bill.EffectiveDate = &t
 	}
 
 	// Populate sponsor if present

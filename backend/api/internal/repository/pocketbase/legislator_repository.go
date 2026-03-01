@@ -3,6 +3,7 @@ package pocketbase
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -55,7 +56,7 @@ func (r *LegislatorRepository) ListLegislators(ctx context.Context, chamber stri
 func (r *LegislatorRepository) GetLegislator(ctx context.Context, id string) (*domain.Legislator, error) {
 	rec, err := r.app.FindRecordById(legislatorCollection, id)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("get legislator: %w", err)

@@ -1,5 +1,5 @@
 // Command bills fetches all bills for the current Utah legislative session
-// from the official Utah Legislature API and upserts them into the database.
+// from the official Utah Legislature API and upserts them into PocketBase.
 //
 // Bills are keyed on (bill_number, session_year). The sponsor is resolved
 // by looking up the legislator's utah_legislature_id in the database, so run
@@ -7,7 +7,7 @@
 //
 // Required environment variables:
 //
-//	DATABASE_URL             - Supabase Postgres connection string
+//	POCKETBASE_DATA_DIR      - path to PocketBase data directory (default: ./pb_data)
 //	UTAH_LEGISLATURE_TOKEN   - Developer token from le.utah.gov
 //
 // Optional:
@@ -22,21 +22,15 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	pocketbaseSDK "github.com/pocketbase/pocketbase"
 
-	"api/internal/repository/postgres"
+	pbrepo "api/internal/repository/pocketbase"
 	"api/internal/sources/utah_legislature"
 )
 
 func main() {
 	ctx := context.Background()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		logger.Error("DATABASE_URL is required")
-		os.Exit(1)
-	}
 
 	token := os.Getenv("UTAH_LEGISLATURE_TOKEN")
 	if token == "" {
@@ -49,15 +43,22 @@ func main() {
 		session = utah_legislature.CurrentSession()
 	}
 
-	db, err := pgxpool.New(ctx, dbURL)
-	if err != nil {
-		logger.Error("failed to connect to database", "error", err)
+	dataDir := os.Getenv("POCKETBASE_DATA_DIR")
+	if dataDir == "" {
+		dataDir = "./pb_data"
+	}
+
+	app := pocketbaseSDK.NewWithConfig(pocketbaseSDK.Config{
+		DefaultDataDir: dataDir,
+	})
+	if err := app.Bootstrap(); err != nil {
+		logger.Error("failed to bootstrap pocketbase", "error", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer app.ResetBootstrapState()
 
-	billRepo := postgres.NewBillRepository(db)
-	legislatorRepo := postgres.NewLegislatorRepository(db)
+	billRepo := pbrepo.NewBillRepository(app)
+	legislatorRepo := pbrepo.NewLegislatorRepository(app)
 	client := utah_legislature.NewClient(token)
 
 	logger.Info("fetching Utah bills", "session", session)
@@ -68,7 +69,7 @@ func main() {
 	}
 	logger.Info("fetched bills", "count", len(bills), "session", session)
 
-	// Build a cache of utah_legislature_id → DB UUID for sponsors.
+	// Build a cache of utah_legislature_id → PocketBase record ID for sponsors.
 	sponsorCache, err := buildSponsorCache(ctx, legislatorRepo)
 	if err != nil {
 		logger.Warn("could not build sponsor cache; sponsor links may be missing", "error", err)
@@ -76,7 +77,7 @@ func main() {
 
 	ok, failed := 0, 0
 	for _, b := range bills {
-		// Resolve the raw utah_legislature_id in SponsorID to a real DB UUID.
+		// Resolve the raw utah_legislature_id in SponsorID to a real PocketBase ID.
 		if id, found := sponsorCache[b.SponsorID]; found {
 			b.SponsorID = id
 		} else {
@@ -97,9 +98,9 @@ func main() {
 	}
 }
 
-// buildSponsorCache returns a map of utah_legislature_id → UUID for all
-// legislators currently in the database.
-func buildSponsorCache(ctx context.Context, repo *postgres.LegislatorRepository) (map[string]string, error) {
+// buildSponsorCache returns a map of utah_legislature_id → PocketBase record ID
+// for all legislators currently in the database.
+func buildSponsorCache(ctx context.Context, repo *pbrepo.LegislatorRepository) (map[string]string, error) {
 	legislators, err := repo.ListLegislators(ctx, "")
 	if err != nil {
 		return nil, err
