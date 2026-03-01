@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -11,9 +10,10 @@ import (
 	"syscall"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/pocketbase/pocketbase"
+	pocketbaseSDK "github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -29,7 +29,7 @@ func main() {
 	// ---------------------------------------------------------------------------
 	// Initialize PocketBase
 	// ---------------------------------------------------------------------------
-	app := pocketbase.New()
+	app := pocketbaseSDK.New()
 
 	// Set data directory from env or default
 	dataDir := os.Getenv("POCKETBASE_DATA_DIR")
@@ -133,14 +133,11 @@ func setupCollections(app core.App) error {
 	legislators, err := app.FindCollectionByNameOrId("legislators")
 	if err != nil {
 		// Collection doesn't exist, create it
-		legislators = &core.Collection{
-			Name: "legislators",
-			Type: core.CollectionTypeBase,
-		}
+		legislators = core.NewBaseCollection("legislators")
 	}
 
 	// Define schema fields
-	legislators.Schema = core.NewSchema(
+	legislators.Fields = core.FieldList{
 		&core.TextField{
 			Name:     "chamber",
 			Required: true,
@@ -188,7 +185,7 @@ func setupCollections(app core.App) error {
 			Name:    "openstates_id",
 			Options: &core.TextOptions{Max: 50},
 		},
-	)
+	}
 
 	// Set public read access
 	legislators.ListRule = types.Ptr("")
@@ -204,13 +201,10 @@ func setupCollections(app core.App) error {
 	// Create bills collection
 	bills, err := app.FindCollectionByNameOrId("bills")
 	if err != nil {
-		bills = &core.Collection{
-			Name: "bills",
-			Type: core.CollectionTypeBase,
-		}
+		bills = core.NewBaseCollection("bills")
 	}
 
-	bills.Schema = core.NewSchema(
+	bills.Fields = core.FieldList{
 		&core.TextField{
 			Name:     "bill_number",
 			Required: true,
@@ -266,7 +260,7 @@ func setupCollections(app core.App) error {
 		&core.NumberField{
 			Name: "legiscan_id",
 		},
-	)
+	}
 
 	bills.ListRule = types.Ptr("")
 	bills.ViewRule = types.Ptr("")
