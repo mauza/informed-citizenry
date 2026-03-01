@@ -1,0 +1,252 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Bills API",
+    "description": "API for querying Utah state bills",
+    "version": "1.0"
+  },
+  "tags": [
+    {
+      "name": "BillService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/bills": {
+      "get": {
+        "operationId": "BillService_ListBills",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListBillsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "sessionYear",
+            "description": "e.g. 2026; defaults to current year if 0",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "status",
+            "description": "e.g. \"introduced\", \"passed\"",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "sponsorId",
+            "description": "UUID of sponsor legislator",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "page",
+            "description": "1-indexed; defaults to 1",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "pageSize",
+            "description": "defaults to 50",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "BillService"
+        ]
+      }
+    },
+    "/v1/bills/{id}": {
+      "get": {
+        "operationId": "BillService_GetBill",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetBillResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "BillService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1Bill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "billNumber": {
+          "type": "string",
+          "title": "e.g. \"HB0001\""
+        },
+        "billType": {
+          "type": "string",
+          "title": "HB, SB, HCR, SCR, HJR, SJR, HR, SR"
+        },
+        "sessionYear": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "sponsor": {
+          "$ref": "#/definitions/v1Legislator",
+          "title": "primary sponsor (embedded)"
+        },
+        "fullTextUrl": {
+          "type": "string"
+        },
+        "lastAction": {
+          "type": "string"
+        },
+        "lastActionDate": {
+          "type": "string",
+          "title": "RFC3339 timestamp"
+        },
+        "fiscalNoteUrl": {
+          "type": "string"
+        }
+      },
+      "description": "Bill represents a Utah state bill or resolution."
+    },
+    "v1GetBillResponse": {
+      "type": "object",
+      "properties": {
+        "bill": {
+          "$ref": "#/definitions/v1Bill"
+        }
+      }
+    },
+    "v1Legislator": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "chamber": {
+          "type": "string",
+          "title": "\"house\" or \"senate\""
+        },
+        "districtNumber": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "firstName": {
+          "type": "string"
+        },
+        "lastName": {
+          "type": "string"
+        },
+        "party": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "website": {
+          "type": "string"
+        },
+        "imageUrl": {
+          "type": "string"
+        }
+      },
+      "description": "Legislator represents a current Utah House or Senate member."
+    },
+    "v1ListBillsResponse": {
+      "type": "object",
+      "properties": {
+        "bills": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Bill"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    }
+  }
+}

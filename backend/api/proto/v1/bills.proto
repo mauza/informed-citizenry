@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package api.v1;
+
+option go_package = "api/gen/go/proto/v1;apiv1";
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "proto/v1/legislators.proto";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Bills API";
+    version: "1.0";
+    description: "API for querying Utah state bills";
+  }
+};
+
+// Bill represents a Utah state bill or resolution.
+message Bill {
+  string     id               = 1;
+  string     bill_number      = 2;  // e.g. "HB0001"
+  string     bill_type        = 3;  // HB, SB, HCR, SCR, HJR, SJR, HR, SR
+  int32      session_year     = 4;
+  string     title            = 5;
+  string     description      = 6;
+  string     status           = 7;
+  Legislator sponsor          = 8;  // primary sponsor (embedded)
+  string     full_text_url    = 9;
+  string     last_action      = 10;
+  string     last_action_date = 11; // RFC3339 timestamp
+  string     fiscal_note_url  = 12;
+}
+
+// ListBillsRequest supports filtering and pagination.
+message ListBillsRequest {
+  int32  session_year = 1; // e.g. 2026; defaults to current year if 0
+  string status       = 2; // e.g. "introduced", "passed"
+  string sponsor_id   = 3; // UUID of sponsor legislator
+  int32  page         = 4; // 1-indexed; defaults to 1
+  int32  page_size    = 5; // defaults to 50
+}
+
+message ListBillsResponse {
+  repeated Bill bills = 1;
+  int32         total = 2;
+}
+
+message GetBillRequest {
+  string id = 1;
+}
+
+message GetBillResponse {
+  Bill bill = 1;
+}
+
+// BillService provides access to Utah state bills.
+service BillService {
+  rpc ListBills(ListBillsRequest) returns (ListBillsResponse) {
+    option (google.api.http) = {
+      get: "/v1/bills"
+    };
+  }
+
+  rpc GetBill(GetBillRequest) returns (GetBillResponse) {
+    option (google.api.http) = {
+      get: "/v1/bills/{id}"
+    };
+  }
+}
