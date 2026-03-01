@@ -76,6 +76,9 @@ func main() {
 		}()
 
 		// Start gRPC-Gateway
+		// SECURITY NOTE: Using insecure credentials is acceptable here because this
+		// is internal communication between the gRPC-Gateway and the gRPC server
+		// running on localhost. In production, consider using mutual TLS.
 		conn, err := grpc.NewClient(
 			"localhost:50051",
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -187,12 +190,13 @@ func setupCollections(app core.App) error {
 		},
 	}
 
-	// Set public read access
+	// Set access rules - authenticated admin only for write operations
+	// Public can read, but only authenticated admins can modify
 	legislators.ListRule = types.Ptr("")
 	legislators.ViewRule = types.Ptr("")
-	legislators.CreateRule = types.Ptr("")
-	legislators.UpdateRule = types.Ptr("")
-	legislators.DeleteRule = types.Ptr("")
+	legislators.CreateRule = types.Ptr("@request.auth.id != '' && @request.auth.isAdmin = true")
+	legislators.UpdateRule = types.Ptr("@request.auth.id != '' && @request.auth.isAdmin = true")
+	legislators.DeleteRule = types.Ptr("@request.auth.id != '' && @request.auth.isAdmin = true")
 
 	if err := app.Save(legislators); err != nil {
 		return err
@@ -262,11 +266,13 @@ func setupCollections(app core.App) error {
 		},
 	}
 
+	// Set access rules - authenticated admin only for write operations
+	// Public can read, but only authenticated admins can modify
 	bills.ListRule = types.Ptr("")
 	bills.ViewRule = types.Ptr("")
-	bills.CreateRule = types.Ptr("")
-	bills.UpdateRule = types.Ptr("")
-	bills.DeleteRule = types.Ptr("")
+	bills.CreateRule = types.Ptr("@request.auth.id != '' && @request.auth.isAdmin = true")
+	bills.UpdateRule = types.Ptr("@request.auth.id != '' && @request.auth.isAdmin = true")
+	bills.DeleteRule = types.Ptr("@request.auth.id != '' && @request.auth.isAdmin = true")
 
 	return app.Save(bills)
 }
